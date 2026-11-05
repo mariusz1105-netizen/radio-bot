@@ -13,10 +13,11 @@ app = Flask(__name__)
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
     os.makedirs(FOLDER_AUDIO)
-
+AZURACAST_API_KEY = "4a6c45c753e78452:9933e4e1c5e97d5b9dbcd76d0e6c47ce
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
-
+STATION_ID = 461
+AZURACAST_URL = "https://a7.asurahosting.com"
 # Inicjalizujemy globalny silnik TTS raz na starcie aplikacji
 try:
     engine = pyttsx3.init()
