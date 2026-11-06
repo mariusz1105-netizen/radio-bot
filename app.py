@@ -1,8 +1,8 @@
 
 import pyttsx3
 from datetime import datetime
-import from flask import Flask, request
-os
+from flask import Flask, request
+import os
 import re
 import random
 import threading
