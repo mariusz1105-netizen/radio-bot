@@ -166,9 +166,9 @@ def odbierz_sms():
         return "OK", 200
 
     return "OK", 200
-
-if __name__ == '__main__':
-    wątek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+ wątek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
     wątek_zegara.start()
+if __name__ == '__main__':
+   
     
     app.run(host='0.0.0.0', port=5000)
