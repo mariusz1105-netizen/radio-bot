@@ -1,4 +1,3 @@
-
 import pyttsx3
 from datetime import datetime
 from flask import Flask, request
@@ -7,22 +6,41 @@ import re
 import random
 import threading
 import time
-
+import requests
+import xml.etree.ElementTree as ET
 app = Flask(__name__)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
     os.makedirs(FOLDER_AUDIO)
-AZURACAST_API_KEY = "4a6c45c753e78452:9933e4e1c5e97d5b9dbcd76d0e6c47ce
+
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
-STATION_ID = 461
-AZURACAST_URL = "https://a7.asurahosting.com"
+
 # Inicjalizujemy globalny silnik TTS raz na starcie aplikacji
 try:
     engine = pyttsx3.init()
 except Exception as e:
     print(f"[OSTRZEŻENIE] Problem z inicjalizacją silnika TTS: {e}")
+# Wewnątrz pętli zegara, przy pełnej godzinie:
+tekst_wiadomosci = pobierz_wiadomosci_polsat()
+
+GLOSY_MESKIE = [0, 2, 4, 6]
+GLOSY_ZESKIE = [1, 3, 5, 7]
+
+def pobierz_losowy_glos_dj(godzina):
+    try:
+        voices = engine.getProperty('voices')
+        max_v = len(voices) if voices else 1
+    except:
+        max_v = 1
+
+    if godzina % 2 == 0:
+        pula = [v for v in GLOSY_MESKIE if v < max_v] or [0]
+        return random.choice(pula), "Męski DJ"
+    else:
+        pula = [v for v in GLOSY_ZESKIE if v < max_v] or [1]
+        return random.choice(pula), "Żeńska DJka"
 
 def zapisz_tekst_jako_mp3(tekst, plec_glosu=0):
     """Generuje plik MP3 z mową syntezatora i zapisuje go w folderze projektu."""
@@ -93,57 +111,32 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-# --- PULA 8 GŁOSÓW DJ-SKICH (4 Mężczyzn / 4 Kobiety) ---
-GLOSY_MESKIE = [0, 2, 4, 6]
-GLOSY_ZESKIE = [1, 3, 5, 7]
-
-def pobierz_losowy_glos_dj(godzina):
-    """Wybiera losowy głos DJ-a z puli męskiej lub żeńskiej w zależności od godziny"""
+# Wątek w tle pilnujący pełnych godzin (1:00 do 24:00) z podaniem numeru telefonu do życzeń
+def pobierz_wiadomosci_polsat():
+    """Pobiera najświeższe nagłówki z kanału RSS Polsat News i układa profesjonalny serwis"""
+    url_rss = "https://polsatnews.pl/rss/wydarzenia.xml"
     try:
-        voices = engine.getProperty('voices')
-        max_v = len(voices) if voices else 1
-    except:
-        max_v = 1
+        response = requests.get(url_rss, timeout=10)
+        if response.status_code == 200:
+            root = ET.fromstring(response.content)
+            naglowki = []
+            for item in root.findall('.//item'):
+                title = item.find('title')
+                if title is not None and title.text:
+                    naglowki.append(title.text)
+                if len(naglowki) >= 4:  # 4 najważniejsze nagłówki newsowe
+                    break
 
-    if godzina % 2 == 0:
-        pula = [v for v in GLOSY_MESKIE if v < max_v] or [0]
-        wybrany = random.choice(pula)
-        return wybrany, "Męski DJ"
-    else:
-        pula = [v for v in GLOSY_ZESKIE if v < max_v] or [1]
-        wybrany = random.choice(pula)
-        return wybrany, "Żeńska DJka"
+            if naglowki:
+                serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
+                for i, news in enumerate(naglowki, 1):
+                    serwis += f"Fakt numer {i}: {news}. "
+                serwis += "To były wiadomości z serwisu Polsat News. "
+                return serwis
+    except Exception as e:
+        print(f"[BŁĄD RSS] Nie udało się pobrać wiadomości: {e}", flush=True)
 
-# Wątek w tle pilnujący pełnych godzin z rotacją głosów DJ-skich
-def pętla_zegara_radiowego():
-    print("[DEBUG] Wątek zegara radia Strefa Zero wystartował pomyślnie!", flush=True)
-    ostatnia_zapowiedziana_godzina = -1
-    while True:
-        try:
-            teraz = datetime.now()
-            aktualna_godzina = teraz.hour  # 0 do 23
-            aktualna_minuta = teraz.minute
-            
-            if aktualna_minuta == 0 and aktualna_godzina != ostatnia_zapowiedziana_godzina:
-                wyswietlana_godzina = 24 if aktualna_godzina == 0 else aktualna_godzina
-                
-                # Losujemy głos DJ-a z puli 4 panów / 4 pań
-                wybrany_glos_zegar, nazwa_stylu = pobierz_losowy_glos_dj(wyswietlana_godzina)
-                
-                komunikat_godzinowy = (
-                    f"Wybiła godzina {wyswietlana_godzina}. Na antenie Radio Strefa Zero. "
-                    "Chcesz wysłać pozdrowienia lub zamówić swoją ulubioną piosenkę? "
-                    "Napisz SMS na numer plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia!"
-                )
-                
-                print(f"[ZEGAR AUTOMATYCZNY] Pełna godzina {wyswietlana_godzina}:00 | Głos: {nazwa_stylu} (indeks {wybrany_glos_zegar})", flush=True)
-                zapisz_tekst_jako_mp3(komunikat_godzinowy, plec_glosu=wybrany_glos_zegar)
-                
-                ostatnia_zapowiedziana_godzina = aktualna_godzina
-        except Exception as e:
-            print(f"[BŁĄD ZEGARA] Wystąpił wyjątek w pętli zegara: {e}", flush=True)
-            
-        time.sleep(20)
+    return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
@@ -156,11 +149,17 @@ def pętla_zegara_radiowego():
             
             wybrany_glos_zegar = 0 if wyswietlana_godzina % 2 == 0 else 1
             
-            komunikat_godzinowy = (
-                f"Wybila godzina {wyswietlana_godzina}. Radio Strefa Zero. "
-                "Chcesz wysłać pozdrowienia lub zamówić piosenkę? "
-                "Napisz SMS na numer plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
-            )
+            # Wewnątrz pętli zegara, przy pełnej godzinie:
+tekst_wiadomosci = pobierz_wiadomosci_polsat()
+
+komunikat_godzinowy = (
+    f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
+    f"{tekst_wiadomosci}"
+    "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
+    "Napisz SMS na naszą radiową linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć! "
+    "Zostańcie z nami, przed nami kolejne hity!"
+)
+            
             
             print(f"[ZEGAR AUTOMATYCZNY] Pełna godzina {wyswietlana_godzina}:00 z numerem telefonu. Generuję zapowiedź.")
             zapisz_tekst_jako_mp3(komunikat_godzinowy, plec_glosu=wybrany_glos_zegar)
@@ -216,9 +215,9 @@ def odbierz_sms():
         return "OK", 200
 
     return "OK", 200
- wątek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    wątek_zegara.start()
+# Uruchomienie zegara w tle, aby działał pod Gunicornem na Renderze
+watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+watek_zegara.start()
+
 if __name__ == '__main__':
-   
-    
     app.run(host='0.0.0.0', port=5000)
