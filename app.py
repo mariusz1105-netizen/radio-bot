@@ -93,7 +93,57 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-# Wątek w tle pilnujący pełnych godzin (1:00 do 24:00) z podaniem numeru telefonu do życzeń
+# --- PULA 8 GŁOSÓW DJ-SKICH (4 Mężczyzn / 4 Kobiety) ---
+GLOSY_MESKIE = [0, 2, 4, 6]
+GLOSY_ZESKIE = [1, 3, 5, 7]
+
+def pobierz_losowy_glos_dj(godzina):
+    """Wybiera losowy głos DJ-a z puli męskiej lub żeńskiej w zależności od godziny"""
+    try:
+        voices = engine.getProperty('voices')
+        max_v = len(voices) if voices else 1
+    except:
+        max_v = 1
+
+    if godzina % 2 == 0:
+        pula = [v for v in GLOSY_MESKIE if v < max_v] or [0]
+        wybrany = random.choice(pula)
+        return wybrany, "Męski DJ"
+    else:
+        pula = [v for v in GLOSY_ZESKIE if v < max_v] or [1]
+        wybrany = random.choice(pula)
+        return wybrany, "Żeńska DJka"
+
+# Wątek w tle pilnujący pełnych godzin z rotacją głosów DJ-skich
+def pętla_zegara_radiowego():
+    print("[DEBUG] Wątek zegara radia Strefa Zero wystartował pomyślnie!", flush=True)
+    ostatnia_zapowiedziana_godzina = -1
+    while True:
+        try:
+            teraz = datetime.now()
+            aktualna_godzina = teraz.hour  # 0 do 23
+            aktualna_minuta = teraz.minute
+            
+            if aktualna_minuta == 0 and aktualna_godzina != ostatnia_zapowiedziana_godzina:
+                wyswietlana_godzina = 24 if aktualna_godzina == 0 else aktualna_godzina
+                
+                # Losujemy głos DJ-a z puli 4 panów / 4 pań
+                wybrany_glos_zegar, nazwa_stylu = pobierz_losowy_glos_dj(wyswietlana_godzina)
+                
+                komunikat_godzinowy = (
+                    f"Wybiła godzina {wyswietlana_godzina}. Na antenie Radio Strefa Zero. "
+                    "Chcesz wysłać pozdrowienia lub zamówić swoją ulubioną piosenkę? "
+                    "Napisz SMS na numer plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia!"
+                )
+                
+                print(f"[ZEGAR AUTOMATYCZNY] Pełna godzina {wyswietlana_godzina}:00 | Głos: {nazwa_stylu} (indeks {wybrany_glos_zegar})", flush=True)
+                zapisz_tekst_jako_mp3(komunikat_godzinowy, plec_glosu=wybrany_glos_zegar)
+                
+                ostatnia_zapowiedziana_godzina = aktualna_godzina
+        except Exception as e:
+            print(f"[BŁĄD ZEGARA] Wystąpił wyjątek w pętli zegara: {e}", flush=True)
+            
+        time.sleep(20)
 def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
