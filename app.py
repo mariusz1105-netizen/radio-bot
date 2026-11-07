@@ -384,3 +384,29 @@ def incoming_sms():
     resp.message(f"Dzięki! Utwór '{message_body}' został przyjęty do realizacji i wkrótce trafi do Radia Strefa 0!")
     
     return str(resp)
+@app.route('/generuj-godzine', methods=['GET', 'POST'])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now()
+        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+        tekst_wiadomosci = pobierz_wiadomosci_polsat()
+        
+        komunikat_godzinowy = (
+            f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
+            f"{tekst_wiadomosci} "
+            "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
+            "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwa tysiące dziewięćset siedemdziesiąt pięć."
+        )
+        
+        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
+        
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
+            sukces = upload_audio_to_playlist(sciezka_pliku, "Zegar")
+            if os.path.exists(sciezka_pliku):
+                os.remove(sciezka_pliku)
+            if sukces:
+                return "Godzina została wygenerowana i wysłana do playlisty Zegar!", 200
+        
+        return "Błąd podczas generowania godziny.", 500
+    except Exception as e:
+        return f"Wystąpił błąd: {e}", 500
