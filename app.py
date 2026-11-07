@@ -266,3 +266,62 @@ def incoming_sms():
     # Tworzenie automatycznej odpowiedzi zwrotnej dla słuchacza przez SMS
     resp = MessagingResponse()
     resp.message(f"Dzięki! Twoja prośba o piosenkę '{message_body}' została przyjęta w Radiu Strefa 0. Pozdrawiamy!")
+import yt_dlp
+import threading
+
+def download_and_upload_request(query):
+    """
+    Wyszukuje utwór na podstawie tekstu z SMS-a, pobiera go 
+    i wgrywa bezpośrednio do playlisty 'Piosenka na Życzenie'.
+    """
+    output_template = "song_request"
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': output_template + '.%(ext)s',
+        'default_search': 'ytsearch1:',
+        'noplaylist': True,
+    }
+    
+    try:
+        print(f"Szukam i pobieram utwór: {query}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
+            downloaded_file = ydl.prepare_filename(info)
+            
+            if os.path.exists(downloaded_file):
+                print(f"Pobrano plik: {downloaded_file}. Wysyłam do AzuraCast...")
+                # Wysłanie pliku do playlisty Piosenka na Życzenie
+                success = upload_audio_to_playlist(downloaded_file, "Piosenka na Życzenie")
+                
+                # Usunięcie pliku z dysku serwera po udanym przesłaniu
+                os.remove(downloaded_file)
+                if success:
+                    print(f"Utwór '{query'}' został pomyślnie dodany do playlisty żądań!")
+                else:
+                    print("Błąd podczas wgrywania pliku do AzuraCasta.")
+            else:
+                print("Nie udało się odnaleźć pobranego pliku na dysku.")
+    except Exception as e:
+        print(f"Błąd w procesie pobierania/wysyłania utworu: {e}")
+
+@app.route('/sms', methods=['POST'])
+def incoming_sms():
+    """
+    Odbiera przychodzący SMS, wysyła potwierdzenie do słuchacza 
+    i uruchamia pobieranie utworu w tle.
+    """
+    message_body = request.values.get('Body', '').strip()
+    sender_phone = request.values.get('From', '')
+    
+    print(f"Otrzymano SMS od {sender_phone}: {message_body}")
+    
+    if message_body:
+        # Uruchamiamy pobieranie w tle (wątek), żeby Twilio nie czekało zbyt długo na odpowiedź
+        thread = threading.Thread(target=download_and_upload_request, args=(message_body,))
+        thread.start()
+    
+    # Automatyczna odpowiedź zwrotna dla słuchacza
+    resp = MessagingResponse()
+    resp.message(f"Dzięki! Utwór '{message_body}' został przyjęty do realizacji i wkrótce trafi do Radia Strefa 0!")
+    
+    return str(resp)
