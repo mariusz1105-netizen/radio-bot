@@ -202,9 +202,3 @@ def endpoint_generuj_godzine():
     except Exception as e:
         return f"Wystąpił błąd: {e}", 500
 
-if _name_ == '_main_':
-    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegara.start()
-    
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port,
