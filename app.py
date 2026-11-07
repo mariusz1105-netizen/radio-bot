@@ -21,7 +21,7 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://a7.asurahosting.com"
-KLUCZ_API = "375464bac4d96561:e209b92885591081dad2db251262e629"
+KLUCZ_API = "3c8e6877334b308c:06c9fd49b872ee4142f872891d79f83c"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
