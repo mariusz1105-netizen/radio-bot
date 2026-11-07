@@ -233,3 +233,36 @@ def generate_and_upload_clock():
 def test_clock():
     generate_and_upload_clock()
     return "Test zegara wykonany! Sprawdź czy plik pojawił się w AzuraCast."
+from flask import request
+from twilio.twiml.messaging_response import MessagingResponse
+import requests
+import os
+
+# Konfiguracja (jeśli nie masz jej jeszcze wyżej w pliku)
+AZURACAST_URL = "https://a7.asurahosting.com"
+STATION_ID = 461
+API_KEY = os.environ.get("AZURACAST_API_KEY")
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}"
+}
+
+@app.route('/sms', methods=['POST'])
+def incoming_sms():
+    """
+    Odbiera przychodzący SMS z prośbą o piosenkę, wysyła zwrotne potwierdzenie
+    i przekazuje informację dalej.
+    """
+    # Pobranie treści wiadomości oraz numeru telefonu nadawcy
+    message_body = request.values.get('Body', '').strip()
+    sender_phone = request.values.get('From', '')
+    
+    print(f"Otrzymano SMS od {sender_phone}: {message_body}")
+    
+    # Tutaj możesz przetworzyć zapytanie (np. wyszukać utwór w AzuraCast lub zapisać go)
+    # Przykład wysłania zapytania do AzuraCast (jeśli dopasowujesz utwór do żądań)
+    # process_song_request(message_body)
+    
+    # Tworzenie automatycznej odpowiedzi zwrotnej dla słuchacza przez SMS
+    resp = MessagingResponse()
+    resp.message(f"Dzięki! Twoja prośba o piosenkę '{message_body}' została przyjęta w Radiu Strefa 0. Pozdrawiamy!")
