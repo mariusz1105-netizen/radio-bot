@@ -19,12 +19,13 @@ if not os.path.exists(FOLDER_AUDIO):
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
 # --- CONFIG AZURACAST ---
-# Klucz pobierany bezpiecznie ze zmiennej środowiskowej na Renderze, z Twoim kluczem jako domyślnym
+STATION_ID = 461
+AZURACAST_URL = "https://a7.asurahosting.com"
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c900964cef529524:b642499e3606b70f34191287ce1f83cb")
-URL_API_FILES = "https://asurahosting.com"
+URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy"""
+    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy AzuraCast"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}"
     }
@@ -32,16 +33,17 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
+            # Plik trafia bezpośrednio do folderu jingles powiązanego z Twoją playlistą
             dane = {'path': 'jingles'} 
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             if response.status_code in:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został pomyślnie przesłany na serwer stacji {STATION_ID}.")
                 return True
             else:
-                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod: {response.status_code}")
+                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod odpowiedzi: {response.status_code} | {response.text}")
     except Exception as e:
-        print(f"[AZURACAST BŁĄD] Nie udało się wysłać pliku: {e}")
+        print(f"[AZURACAST BŁĄD] Nie udało się nawiązać połączenia z serwerem: {e}")
     return False
 
 def zapisz_tekst_jako_mp3(tekst):
@@ -50,7 +52,7 @@ def zapisz_tekst_jako_mp3(tekst):
         nazwa_pliku = datetime.now().strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else datetime.now().strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
         
-        # Generowanie profesjonalnego polskiego lektora
+        # Generowanie profesjonalnego polskiego lektora gTTS
         tts = gTTS(text=tekst, lang='pl', slow=False)
         tts.save(sciezka_pliku)
         
@@ -59,7 +61,7 @@ def zapisz_tekst_jako_mp3(tekst):
         # AUTOMATYCZNY UPLOAD NA SERWER RADIOWY
         wyslij_do_azuracast(sciezka_pliku)
         
-        # Czyszczenie starego pliku z kontenera Render, aby nie przepełniać pamięci
+        # Czyszczenie pamięci tymczasowej w kontenerze Render
         if os.path.exists(sciezka_pliku):
             os.remove(sciezka_pliku)
             
@@ -75,12 +77,12 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
     except Exception as e:
-        print(f"[BŁ BŁĄD LOGÓW] {e}")
+        print(f"[BŁĄD LOGÓW] Problem z zapisem do pliku tekstowego: {e}")
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
     slownik_poprawek = {
-        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "żyčymy",
+        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
         "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
         "dzien": "dzień", "urodziny": "urodziny", "urodzin": "urodzin",
         "dziekuje": "dziękuję", "dzieki": "dzięki", "sie": "się", "ze": "że",
@@ -107,7 +109,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
-    """Pobiera najświeższe nagłówki z kanału RSS Polsat News"""
+    """Pobiera najświeższe nagłówki z dedykowanego kanału RSS Polsat News"""
     url_rss = "https://polsatnews.pl"
     try:
         response = requests.get(url_rss, timeout=10)
@@ -121,7 +123,7 @@ def pobierz_wiadomosci_polsat():
                 serwis += "To były wiadomości z serwisu Polsat News. "
                 return serwis
     except Exception as e:
-        print(f"[BŁĄD RSS] {e}")
+        print(f"[BŁĄD RSS] Nie udało się sparsować wiadomości Polsatu: {e}")
     return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
 def pętla_zegara_radiowego():
@@ -179,234 +181,3 @@ if __name__ == '__main__':
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-AZURACAST_URL = "https://a7.asurahosting.com"  # Twój adres panelu
-STATION_ID = 461  # ID Twojej stacji
-API_KEY = os.environ.get("AZURACAST_API_KEY")
-
-headers = {
-    "Authorization": f"Bearer {API_KEY}"
-}
-
-def upload_audio_to_playlist(file_path, playlist_name):
-    """
-    Wysyła plik audio do AzuraCast i umieszcza go w folderze wybranej playlisty.
-    """
-    upload_url = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
-    
-    with open(file_path, "rb") as f:
-        files = {"file": (os.path.basename(file_path), f, "audio/mpeg")}
-        data = {"path": f"/{playlist_name}"}
-        
-        response = requests.post(upload_url, headers=headers, files=files, data=data)
-        
-    if response.status_code in [200, 201]:
-        print(f"Plik pomyślnie wysłany do playlisty: {playlist_name}")
-        return True
-    else:
-        print(f"Błąd wysyłania do {playlist_name}: {response.status_code} - {response.text}")
-        return False
-
-# Przykład użycia dla serwisu lub piosenki na życzenie:
-# upload_audio_to_playlist("wiadomosci.mp3", "zapowiedzi i serwis")
-# upload_audio_to_playlist("zyczenie.mp3", "Piosenka na Życzenie")
-from gtts import gTTS
-
-def generate_and_upload_clock():
-    """
-    Generuje plik z aktualną godziną i wysyła go do playlisty Zegar w AzuraCast.
-    """
-    now = datetime.now()
-    # Tekst, który ma wypowiedzieć syntezator (np. "Jest godzina 14:00")
-    text = f"Jest godzina {now.strftime('%H:%M')}"
-    
-    file_path = "zegar.mp3"
-    
-    # Tworzenie pliku audio w języku polskim
-    tts = gTTS(text=text, lang='pl')
-    tts.save(file_path)
-    
-    # Wysłanie pliku do playlisty o nazwie "Zegar"
-    upload_audio_to_playlist(file_path, "Zegar")
-
-# Opcjonalny przycisk testowy w przeglądarce:
-@app.route('/test-clock')
-def test_clock():
-    generate_and_upload_clock()
-    return "Test zegara wykonany! Sprawdź czy plik pojawił się w AzuraCast."
-from flask import request
-from twilio.twiml.messaging_response import MessagingResponse
-import requests
-import os
-
-# Konfiguracja (jeśli nie masz jej jeszcze wyżej w pliku)
-AZURACAST_URL = "https://a7.asurahosting.com"
-STATION_ID = 461
-API_KEY = os.environ.get("AZURACAST_API_KEY")
-
-headers = {
-    "Authorization": f"Bearer {API_KEY}"
-}
-
-@app.route('/sms', methods=['POST'])
-def incoming_sms():
-    """
-    Odbiera przychodzący SMS z prośbą o piosenkę, wysyła zwrotne potwierdzenie
-    i przekazuje informację dalej.
-    """
-    # Pobranie treści wiadomości oraz numeru telefonu nadawcy
-    message_body = request.values.get('Body', '').strip()
-    sender_phone = request.values.get('From', '')
-    
-    print(f"Otrzymano SMS od {sender_phone}: {message_body}")
-    
-    # Tutaj możesz przetworzyć zapytanie (np. wyszukać utwór w AzuraCast lub zapisać go)
-    # Przykład wysłania zapytania do AzuraCast (jeśli dopasowujesz utwór do żądań)
-    # process_song_request(message_body)
-    
-    # Tworzenie automatycznej odpowiedzi zwrotnej dla słuchacza przez SMS
-    resp = MessagingResponse()
-    resp.message(f"Dzięki! Twoja prośba o piosenkę '{message_body}' została przyjęta w Radiu Strefa 0. Pozdrawiamy!")
-import yt_dlp
-import threading
-
-def download_and_upload_request(query):
-    """
-    Wyszukuje utwór na podstawie tekstu z SMS-a, pobiera go 
-    i wgrywa bezpośrednio do playlisty 'Piosenka na Życzenie'.
-    """
-    output_template = "song_request"
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_template + '.%(ext)s',
-        'default_search': 'ytsearch1:',
-        'noplaylist': True,
-    }
-    
-    try:
-        print(f"Szukam i pobieram utwór: {query}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-            downloaded_file = ydl.prepare_filename(info)
-            
-            if os.path.exists(downloaded_file):
-                print(f"Pobrano plik: {downloaded_file}. Wysyłam do AzuraCast...")
-                # Wysłanie pliku do playlisty Piosenka na Życzenie
-                success = upload_audio_to_playlist(downloaded_file, "Piosenka na Życzenie")
-                
-                # Usunięcie pliku z dysku serwera po udanym przesłaniu
-                os.remove(downloaded_file)
-                if success:
-                    print(f"Utwór '{query'}' został pomyślnie dodany do playlisty żądań!")
-                else:
-                    print("Błąd podczas wgrywania pliku do AzuraCasta.")
-            else:
-                print("Nie udało się odnaleźć pobranego pliku na dysku.")
-    except Exception as e:
-        print(f"Błąd w procesie pobierania/wysyłania utworu: {e}")
-
-@app.route('/sms', methods=['POST'])
-def incoming_sms():
-    """
-    Odbiera przychodzący SMS, wysyła potwierdzenie do słuchacza 
-    i uruchamia pobieranie utworu w tle.
-    """
-    message_body = request.values.get('Body', '').strip()
-    sender_phone = request.values.get('From', '')
-    
-    print(f"Otrzymano SMS od {sender_phone}: {message_body}")
-    
-    if message_body:
-        # Uruchamiamy pobieranie w tle (wątek), żeby Twilio nie czekało zbyt długo na odpowiedź
-        thread = threading.Thread(target=download_and_upload_request, args=(message_body,))
-        thread.start()
-    
-    # Automatyczna odpowiedź zwrotna dla słuchacza
-    resp = MessagingResponse()
-    resp.message(f"Dzięki! Utwór '{message_body}' został przyjęty do realizacji i wkrótce trafi do Radia Strefa 0!")
-    
-    return str(resp)
-import yt_dlp
-import threading
-
-def download_and_upload_request(query):
-    """
-    Wyszukuje utwór na podstawie tekstu z SMS-a, pobiera go 
-    i wgrywa bezpośrednio do playlisty 'Piosenka na Życzenie'.
-    """
-    output_template = "song_request"
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_template + '.%(ext)s',
-        'default_search': 'ytsearch1:',
-        'noplaylist': True,
-    }
-    
-    try:
-        print(f"Szukam i pobieram utwór: {query}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-            downloaded_file = ydl.prepare_filename(info)
-            
-            if os.path.exists(downloaded_file):
-                print(f"Pobrano plik: {downloaded_file}. Wysyłam do AzuraCast...")
-                # Wysłanie pliku do playlisty Piosenka na Życzenie
-                success = upload_audio_to_playlist(downloaded_file, "Piosenka na Życzenie")
-                
-                # Usunięcie pliku z dysku serwera po udanym przesłaniu
-                os.remove(downloaded_file)
-                if success:
-                    print(f"Utwór '{query'}' został pomyślnie dodany do playlisty żądań!")
-                else:
-                    print("Błąd podczas wgrywania pliku do AzuraCasta.")
-            else:
-                print("Nie udało się odnaleźć pobranego pliku na dysku.")
-    except Exception as e:
-        print(f"Błąd w procesie pobierania/wysyłania utworu: {e}")
-
-@app.route('/sms', methods=['POST'])
-def incoming_sms():
-    """
-    Odbiera przychodzący SMS, wysyła potwierdzenie do słuchacza 
-    i uruchamia pobieranie utworu w tle.
-    """
-    message_body = request.values.get('Body', '').strip()
-    sender_phone = request.values.get('From', '')
-    
-    print(f"Otrzymano SMS od {sender_phone}: {message_body}")
-    
-    if message_body:
-        # Uruchamiamy pobieranie w tle (wątek), żeby Twilio nie czekało zbyt długo na odpowiedź
-        thread = threading.Thread(target=download_and_upload_request, args=(message_body,))
-        thread.start()
-    
-    # Automatyczna odpowiedź zwrotna dla słuchacza
-    resp = MessagingResponse()
-    resp.message(f"Dzięki! Utwór '{message_body}' został przyjęty do realizacji i wkrótce trafi do Radia Strefa 0!")
-    
-    return str(resp)
-@app.route('/generuj-godzine', methods=['GET', 'POST'])
-def endpoint_generuj_godzine():
-    try:
-        teraz = datetime.now()
-        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        tekst_wiadomosci = pobierz_wiadomosci_polsat()
-        
-        komunikat_godzinowy = (
-            f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
-            f"{tekst_wiadomosci} "
-            "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
-            "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwa tysiące dziewięćset siedemdziesiąt pięć."
-        )
-        
-        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
-            sukces = upload_audio_to_playlist(sciezka_pliku, "Zegar")
-            if os.path.exists(sciezka_pliku):
-                os.remove(sciezka_pliku)
-            if sukces:
-                return "Godzina została wygenerowana i wysłana do playlisty Zegar!", 200
-        
-        return "Błąd podczas generowania godziny.", 500
-    except Exception as e:
-        return f"Wystąpił błąd: {e}", 500
