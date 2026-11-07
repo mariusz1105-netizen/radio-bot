@@ -33,7 +33,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
-            dane = {'dir': ''}
+            dane = {'path': 'jingles'}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
