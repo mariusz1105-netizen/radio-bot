@@ -27,7 +27,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 def wyslij_do_azuracast(sciezka_pliku_mp3):
     """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy AzuraCast"""
     naglowki = {
-        "Authorization": f"Bearer {KLUCZ_API}"
+       "X-API-Key": KLUCZ_API
     }
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
