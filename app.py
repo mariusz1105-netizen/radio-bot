@@ -198,7 +198,7 @@ def endpoint_generuj_godzine():
             if sukces:
                 return "Godzina została wygenerowana i wysłana do playlisty Zegar!", 200
         
-        return "Błąd podczas generowania godziny.", 500
+        return "Błąd: Funkcja wyslij_do_azuracast zwróciła False (sprawdź adres URL i Klucz API AzuraCast)", 500
     except Exception as e:
         return f"Wystąpił błąd: {e}", 500
 
