@@ -9,7 +9,7 @@ import time
 import requests
 import xml.etree.ElementTree as ET
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
