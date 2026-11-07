@@ -9,7 +9,7 @@ import time
 import requests
 import xml.etree.ElementTree as ET
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
@@ -37,7 +37,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             dane = {'path': 'jingles'} 
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
-            if response.status_code in:
+            if response.status_code in [200, 201]:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został pomyślnie przesłany na serwer stacji {STATION_ID}.")
                 return True
             else:
@@ -175,13 +175,6 @@ def odbierz_sms():
     zapisz_tekst_jako_mp3(komunikat_dj)
     return "OK", 200
 
-if __name__ == '__main__':
-    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegara.start()
-    
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
-
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -199,7 +192,7 @@ def endpoint_generuj_godzine():
         sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
         
         if sciezka_pliku and os.path.exists(sciezka_pliku):
-            sukces = upload_audio_to_playlist(sciezka_pliku, "Zegar")
+            sukces = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if sukces:
@@ -208,3 +201,10 @@ def endpoint_generuj_godzine():
         return "Błąd podczas generowania godziny.", 500
     except Exception as e:
         return f"Wystąpił błąd: {e}", 500
+
+if _name_ == '_main_':
+    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegara.start()
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port,
