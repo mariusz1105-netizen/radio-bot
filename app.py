@@ -209,3 +209,27 @@ def upload_audio_to_playlist(file_path, playlist_name):
 # Przykład użycia dla serwisu lub piosenki na życzenie:
 # upload_audio_to_playlist("wiadomosci.mp3", "zapowiedzi i serwis")
 # upload_audio_to_playlist("zyczenie.mp3", "Piosenka na Życzenie")
+from gtts import gTTS
+
+def generate_and_upload_clock():
+    """
+    Generuje plik z aktualną godziną i wysyła go do playlisty Zegar w AzuraCast.
+    """
+    now = datetime.now()
+    # Tekst, który ma wypowiedzieć syntezator (np. "Jest godzina 14:00")
+    text = f"Jest godzina {now.strftime('%H:%M')}"
+    
+    file_path = "zegar.mp3"
+    
+    # Tworzenie pliku audio w języku polskim
+    tts = gTTS(text=text, lang='pl')
+    tts.save(file_path)
+    
+    # Wysłanie pliku do playlisty o nazwie "Zegar"
+    upload_audio_to_playlist(file_path, "Zegar")
+
+# Opcjonalny przycisk testowy w przeglądarce:
+@app.route('/test-clock')
+def test_clock():
+    generate_and_upload_clock()
+    return "Test zegara wykonany! Sprawdź czy plik pojawił się w AzuraCast."
