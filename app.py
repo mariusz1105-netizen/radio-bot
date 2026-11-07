@@ -179,3 +179,33 @@ if __name__ == '__main__':
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+AZURACAST_URL = "https://a7.asurahosting.com"  # Twój adres panelu
+STATION_ID = 461  # ID Twojej stacji
+API_KEY = os.environ.get("AZURACAST_API_KEY")
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}"
+}
+
+def upload_audio_to_playlist(file_path, playlist_name):
+    """
+    Wysyła plik audio do AzuraCast i umieszcza go w folderze wybranej playlisty.
+    """
+    upload_url = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
+    
+    with open(file_path, "rb") as f:
+        files = {"file": (os.path.basename(file_path), f, "audio/mpeg")}
+        data = {"path": f"/{playlist_name}"}
+        
+        response = requests.post(upload_url, headers=headers, files=files, data=data)
+        
+    if response.status_code in [200, 201]:
+        print(f"Plik pomyślnie wysłany do playlisty: {playlist_name}")
+        return True
+    else:
+        print(f"Błąd wysyłania do {playlist_name}: {response.status_code} - {response.text}")
+        return False
+
+# Przykład użycia dla serwisu lub piosenki na życzenie:
+# upload_audio_to_playlist("wiadomosci.mp3", "zapowiedzi i serwis")
+# upload_audio_to_playlist("zyczenie.mp3", "Piosenka na Życzenie")
