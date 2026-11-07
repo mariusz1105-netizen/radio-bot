@@ -25,22 +25,26 @@ KLUCZ_API = "3c8e6877334b308c:06c9fd49b872ee4142f872891d79f83c"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy AzuraCast"""
+    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy"""
     naglowki = {
-       "X-API-Key": KLUCZ_API
+        "X-API-Key": KLUCZ_API
     }
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
-            # Plik trafia bezpośrednio do folderu jingles powiązanego z Twoją playlistą
-            dane = {'path': 'jingles'} 
+            dane = {'dir': ''}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
-            if response.status_code in [200, 201]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został pomyślnie przesłany na serwer stacji {STATION_ID}.")
+            
+            if response.status_code in [200, 204]:
                 return True
             else:
+                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod odpowiedzi: {response.status_code} | {response.text}")
+                return False
+    except Exception as e:
+        print(f"[AZURACAST BŁĄD] Wyjątek: {e}")
+        return False
                 print(f"[AZURACAST BŁĄD] Serwer zwrócił kod odpowiedzi: {response.status_code} | {response.text}")
     except Exception as e:
         print(f"[AZURACAST BŁĄD] Nie udało się nawiązać połączenia z serwerem: {e}")
