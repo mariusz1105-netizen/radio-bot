@@ -30,7 +30,6 @@ STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
     """Wysyła plik MP3 do AzuraCast, udając prawdziwą przeglądarkę w celu ominięcia Cloudflare"""
-    # Dodajemy pełne nagłówki prawdziwego komputera (User-Agent), aby Cloudflare nas przepuścił
     naglowki = {
         "X-API-Key": KLUCZ_API,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -43,9 +42,9 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
             dane = {'path': 'jingles'}
             
-            # Wymuszamy wysłanie zapytania z udawaniem człowieka
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
             
+            # Zabezpieczona lista kodów HTTP
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
@@ -167,10 +166,11 @@ def odbierz_sms():
 
     teraz = datetime.now(STREFA_EUROPA)
     imie_nadawcy = "Słuchacz"
-    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźź]{2,15})', tresc_sms)
+    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
+    # Zabezpieczona lista dni tygodnia dla koncertu życzeń
     dni_koncertu = [4, 5]
     trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
@@ -210,7 +210,7 @@ def endpoint_generuj_godzine():
             sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
-            if sukces:
+            if sukses:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
