@@ -193,8 +193,16 @@ def endpoint_generuj_godzine():
             "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
             "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
-        zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+       sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
+    if sciezka_pliku and os.path.exists(sciezka_pliku):
+        sukces = wyslij_do_azuracast(sciezka_pliku)
+        if os.path.exists(sciezka_pliku):
+            os.remove(sciezka_pliku)
+        if sukces:
+            return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+        else:
+            return {"status": "error", "message": "Błąd wysyłania do AzuraCast"}, 500
+    return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
