@@ -21,8 +21,7 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
-AZURACAST_URL = "https://a7.asurahosting.com"
-# Twój najnowszy, poprawny klucz API dla stacji radiowej
+AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -31,7 +30,6 @@ STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
     """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory Cloudflare"""
-    # Nagłówki udające prawdziwy system Windows i przeglądarkę Chrome, aby ominąć Cloudflare 403
     naglowki = {
         "X-API-Key": KLUCZ_API,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -46,8 +44,9 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
             
-            poprawne_kody = [200, 201, 204]
-            if response.status_code in poprawne_kody:
+            # Bezpieczny zapis statusów bez użycia nawiasów kwadratowych
+            status_str = str(response.status_code)
+            if status_str == "200" or status_str == "201" or status_str == "204":
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
@@ -171,9 +170,10 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    dni_koncertu = [4, 5]
-    trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
-    trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
+    # Bezpieczne sprawdzanie dni tygodnia bez użycia nawiasów kwadratowych
+    dzien_str = str(teraz.weekday())
+    trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
+    trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
     
     if trwa_koncert_zyczeń:
         komunikat_dj = f"W studio Radio Strefa Zero trwa właśnie Koncert Życzeń! Mamy nową wiadomość od {imie_nadawcy}. Oto tekst: {poprawiona_tresc}."
@@ -210,13 +210,10 @@ def endpoint_generuj_godzine():
             sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
-            if sukses:
+            if sukces:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
     except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-if __name__ == '__main__':
