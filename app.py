@@ -202,9 +202,10 @@ def endpoint_generuj_godzine():
             return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
         else:
             return {"status": "error", "message": "Błąd wysyłania do AzuraCast"}, 500
-    return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
+    else:
+        return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
+except Exception as e:
+    return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
     watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
