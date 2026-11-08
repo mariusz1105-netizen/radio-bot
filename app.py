@@ -22,7 +22,7 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
-# Wklejony nowy, poprawny klucz API dedykowany do jingles
+# Twój aktualny klucz API do jingles
 KLUCZ_API = "ac83bc0e9fab71ec:14b3eb1364121576b49a4b2db91b8f3a"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -47,7 +47,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
-                info_blad = f"Kod {response.status_code} | Serwer napisał: {response.text}"
+                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text}"
                 print(f"[AZURACAST BŁĄD] {info_blad}")
                 return False, info_blad
     except Exception as e:
@@ -168,7 +168,7 @@ def odbierz_sms():
     
     dni_koncertu = [4, 5]
     trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
-    trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
+    trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= voter.hour < 18)
     
     if trwa_koncert_zyczeń:
         komunikat_dj = f"W studio Radio Strefa Zero trwa właśnie Koncert Życzeń! Mamy nową wiadomość od {imie_nadawcy}. Oto tekst: {poprawiona_tresc}."
