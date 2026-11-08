@@ -20,35 +20,33 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
-AZURACAST_URL = "https://a7.asurahosting.com"
+AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "3c8e6877334b308c:06c9fd49b872ee4142f872891d79f83c"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
     """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy"""
     naglowki = {
-        "X-API-Key": KLUCZ_API
+        "Authorization": f"Bearer {KLUCZ_API}"
     }
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
-            dane = {'dir': ''}
+            # Wskazujemy podfolder 'jingles' na serwerze AzuraCast
+            dane = {'path': 'jingles'}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
-            if response.status_code in [200, 201, 204]:
+            if response.status_code in:
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True
-           
-                blad_info = f"Kod {response.status_code}: {response.text}"
-                print(f"[AZURACAST BŁĄD] {blad_info}")
-                return blad_info
-    except Exception as e:
-        print(f"[AZURACAST BŁĄD] Wyjątek: {e}")
-        return str(e)
             else:
-                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod odpowiedzi: {response.status_code} | {response.text}")
+                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod: {response.status_code} | {response.text}")
                 return False
+    except Exception as e:
+        print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
+        return False
     
 def zapisz_tekst_jako_mp3(tekst):
     """Generuje plik MP3 przy użyciu gTTS (Google Cloud) stabilnego dla Render.com"""
@@ -65,7 +63,7 @@ def zapisz_tekst_jako_mp3(tekst):
         # AUTOMATYCZNY UPLOAD NA SERWER RADIOWY
         wyslij_do_azuracast(sciezka_pliku)
         
-        # Czyszczenie pamięci tymczasowej w kontenerze Render
+        # Czyszczenie pamięci tymczasowej w kontenerce Render
         if os.path.exists(sciezka_pliku):
             os.remove(sciezka_pliku)
             
@@ -190,19 +188,16 @@ def endpoint_generuj_godzine():
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
             f"{tekst_wiadomosci} "
             "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
-            "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwa tysiące dziewięćset siedemdziesiąt pięć."
+            "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
-        
-        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
-            sukces = wyslij_do_azuracast(sciezka_pliku)
-            if os.path.exists(sciezka_pliku):
-                os.remove(sciezka_pliku)
-            if sukces:
-                return "Godzina została wygenerowana i wysłana do playlisty Zegar!", 200
-        
-        return "Błąd: Funkcja wyslij_do_azuracast zwróciła False (sprawdź adres URL i Klucz API AzuraCast)", 500
+        zapisz_tekst_jako_mp3(komunikat_godzinowy)
+        return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
     except Exception as e:
-        return f"Wystąpił błąd: {e}", 500
+        return {"status": "error", "message": str(e)}, 500
 
+if __name__ == '__main__':
+    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegara.start()
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
