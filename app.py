@@ -39,7 +39,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             
             if response.status_code in [200, 201, 204]:
                 return True
-            else:
+           
                 blad_info = f"Kod {response.status_code}: {response.text}"
                 print(f"[AZURACAST BŁĄD] {blad_info}")
                 return blad_info
