@@ -32,6 +32,28 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
+            # AzuraCast wymaga klucza 'file' w formacie wieloczęściowym (multipart)
+            pliki = {
+                'file': (nazwa_pliku, f, 'audio/mpeg')
+            }
+            
+            odpowiedz = requests.post(URL_API_FILES, headers=naglowki, files=pliki)
+            
+            # Logujemy odpowiedź serwera w konsoli Rendera, żeby widzieć dokładny status
+            print(f"[AZURACAST] Status odpowiedzi: {odpowiedz.status_code}, Treść: {odpowiedz.text}")
+            
+            if odpowiedz.status_code in [200, 201, 204]:
+                return True
+            else:
+                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod: {odpowiedz.status_code} | {odpowiedz.text}")
+                return False
+    except Exception as e:
+        print(f"[AZURACAST WYJĄTEK] {str(e)}")
+        return False
+    }
+    try:
+        nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
+        with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
             dane = {'path': 'jingles'}
             
