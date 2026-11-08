@@ -1,6 +1,5 @@
 from gtts import gTTS
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from flask import Flask, request
 import os
 import re
@@ -22,19 +21,13 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
-KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
+KLUCZ_API = "3c8e6877334b308c:06c9fd49b872ee4142f872891d79f83c"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
-# Definiujemy na stałe naszą strefę czasową dla bota
-STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
-
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory Cloudflare"""
+    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy"""
     naglowki = {
-        "X-API-Key": KLUCZ_API,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7"
+        "Authorization": f"Bearer {KLUCZ_API}"
     }
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
@@ -42,26 +35,24 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
             dane = {'path': 'jingles'}
             
-            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
+            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
-            # Bezpieczny zapis statusów bez użycia nawiasów kwadratowych
-            status_str = str(response.status_code)
-            if status_str == "200" or status_str == "201" or status_str == "204":
+            # Naprawiona lista poprawnych kodów odpowiedzi HTTP
+            poprawne_kody = [200, 201, 204]
+            if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
-                return True, f"Sukces (Kod {response.status_code})"
+                return True
             else:
-                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
-                print(f"[AZURACAST BŁĄD] {info_blad}")
-                return False, info_blad
+                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod: {response.status_code} | {response.text}")
+                return False
     except Exception as e:
         print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
-        return False, str(e)
+        return False
     
 def zapisz_tekst_jako_mp3(tekst):
-    """Generuje plik MP3 przy użyciu gTTS (Google Cloud) i zwraca jego lokalną ścieżkę"""
+    """Generuje plik MP3 przy użyciu gTTS (Google Cloud) stabilnego dla Render.com"""
     try:
-        teraz = datetime.now(STREFA_EUROPA)
-        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
+        nazwa_pliku = datetime.now().strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else datetime.now().strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
         
         # Generowanie profesjonalnego polskiego lektora gTTS
@@ -69,6 +60,14 @@ def zapisz_tekst_jako_mp3(tekst):
         tts.save(sciezka_pliku)
         
         print(f"[RADIO] Chmura wygenerowała plik audio: {sciezka_pliku}")
+        
+        # AUTOMATYCZNY UPLOAD NA SERWER RADIOWY
+        wyslij_do_azuracast(sciezka_pliku)
+        
+        # Czyszczenie pamięci tymczasowej w kontenerze Render
+        if os.path.exists(sciezka_pliku):
+            os.remove(sciezka_pliku)
+            
         return sciezka_pliku
     except Exception as e:
         print(f"[BŁĄD CHMURY TTS] Problem z generowaniem mowy: {e}")
@@ -76,8 +75,7 @@ def zapisz_tekst_jako_mp3(tekst):
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
     try:
-        teraz = datetime.now(STREFA_EUROPA)
-        czas_wpisu = teraz.strftime("%Y-%m-%d %H:%M:%S")
+        czas_wpisu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         wpis = f"[{czas_wpisu}] Od: {numer_nadawcy} | Treść: {tresc_sms}\n"
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
@@ -103,7 +101,7 @@ def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
     return any(l in "aąeęioóuy" for l in t_lower)
 
 def pobierz_aktualny_gatunek_muzyczny():
-    godzina = datetime.now(STREFA_EUROPA).hour
+    godzina = datetime.now().hour
     if godzina >= 23 or godzina < 1:
         return "Techno / Hard Techno (Nocny Blok Klubowy)"
     elif 6 <= godzina < 17:
@@ -114,7 +112,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
-    """Pobiera najświeższe nagłówki z kanału RSS Polsat News"""
+    """Pobiera najświeższe nagłówki z dedykowanego kanału RSS Polsat News"""
     url_rss = "https://polsatnews.pl"
     try:
         response = requests.get(url_rss, timeout=10)
@@ -134,7 +132,7 @@ def pobierz_wiadomosci_polsat():
 def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
-        teraz = datetime.now(STREFA_EUROPA)
+        teraz = datetime.now()
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             tekst_wiadomosci = pobierz_wiadomosci_polsat()
@@ -145,11 +143,7 @@ def pętla_zegara_radiowego():
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
                 "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
-            sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-            if sciezka and os.path.exists(sciezka):
-                wyslij_do_azuracast(sciezka)
-                if os.path.exists(sciezka):
-                    os.remove(sciezka)
+            zapisz_tekst_jako_mp3(komunikat_godzinowy)
             ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
@@ -164,16 +158,16 @@ def odbierz_sms():
     poprawiona_tresc = inteligentna_korekta(tresc_sms)
     zapisz_brakujacy_utwor(poprawiona_tresc, numer_nadawcy)
 
-    teraz = datetime.now(STREFA_EUROPA)
+    teraz = datetime.now()
     imie_nadawcy = "Słuchacz"
     match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    # Bezpieczne sprawdzanie dni tygodnia bez użycia nawiasów kwadratowych
-    dzien_str = str(teraz.weekday())
-    trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
-    trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
+    # Naprawiona lista dni tygodnia dla koncertu życzeń (4 = Piątek, 5 = Sobota)
+    dni_koncertu = [4, 5]
+    trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
+    trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
     
     if trwa_koncert_zyczeń:
         komunikat_dj = f"W studio Radio Strefa Zero trwa właśnie Koncert Życzeń! Mamy nową wiadomość od {imie_nadawcy}. Oto tekst: {poprawiona_tresc}."
@@ -183,18 +177,13 @@ def odbierz_sms():
         gatunek = pobierz_aktualny_gatunek_muzyczny()
         komunikat_dj = f"Szybka przerwa w muzyce, w pasmie {gatunek}. Przesyłamy pozdrowienia od słuchacza o imieniu {imie_nadawcy}: {poprawiona_tresc}."
 
-    sciezka = zapisz_tekst_jako_mp3(komunikat_dj)
-    if sciezka and os.path.exists(sciezka):
-        wyslij_do_azuracast(sciezka)
-        if os.path.exists(sciezka):
-            os.remove(sciezka)
-        
+    zapisz_tekst_jako_mp3(komunikat_dj)
     return "OK", 200
 
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
-        teraz = datetime.now(STREFA_EUROPA)
+        teraz = datetime.now()
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         tekst_wiadomosci = pobierz_wiadomosci_polsat()
         
@@ -204,16 +193,14 @@ def endpoint_generuj_godzine():
             "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
             "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
-        
-        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
-            sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
-            if os.path.exists(sciezka_pliku):
-                os.remove(sciezka_pliku)
-            if sukces:
-                return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
-            else:
-                return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
-        else:
-            return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
+        zapisz_tekst_jako_mp3(komunikat_godzinowy)
+        return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
     except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+if __name__ == '__main__':
+    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegara.start()
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
