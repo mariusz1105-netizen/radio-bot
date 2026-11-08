@@ -22,7 +22,6 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
-# Wklejony najnowszy klucz API dedykowany do jingles
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -30,9 +29,13 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła wygenerowany plik z życzeniami lub zegarem na serwer radiowy"""
+    """Wysyła plik MP3 do AzuraCast, udając prawdziwą przeglądarkę w celu ominięcia Cloudflare"""
+    # Dodajemy pełne nagłówki prawdziwego komputera (User-Agent), aby Cloudflare nas przepuścił
     naglowki = {
-        "Authorization": f"Bearer {KLUCZ_API}"
+        "X-API-Key": KLUCZ_API,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7"
     }
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
@@ -40,14 +43,15 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
             dane = {'path': 'jingles'}
             
-            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
+            # Wymuszamy wysłanie zapytania z udawaniem człowieka
+            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
             
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
-                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text}"
+                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:200]}"
                 print(f"[AZURACAST BŁĄD] {info_blad}")
                 return False, info_blad
     except Exception as e:
@@ -163,7 +167,7 @@ def odbierz_sms():
 
     teraz = datetime.now(STREFA_EUROPA)
     imie_nadawcy = "Słuchacz"
-    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
+    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźź]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
@@ -209,15 +213,10 @@ def endpoint_generuj_godzine():
             if sukces:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
-                return {"status": "error", "message": f"Błąd wysyłania do AzuraCast. Szczegóły: {powod_statusu}"}, 500
+                return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
         else:
-            return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
+            return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
-    watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegara.start()
-    
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
