@@ -37,7 +37,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
-            # Naprawiona lista poprawnych kodów odpowiedzi HTTP
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
@@ -60,14 +59,6 @@ def zapisz_tekst_jako_mp3(tekst):
         tts.save(sciezka_pliku)
         
         print(f"[RADIO] Chmura wygenerowała plik audio: {sciezka_pliku}")
-        
-        # AUTOMATYCZNY UPLOAD NA SERWER RADIOWY
-        wyslij_do_azuracast(sciezka_pliku)
-        
-        # Czyszczenie pamięci tymczasowej w kontenerze Render
-        if os.path.exists(sciezka_pliku):
-            os.remove(sciezka_pliku)
-            
         return sciezka_pliku
     except Exception as e:
         print(f"[BŁĄD CHMURY TTS] Problem z generowaniem mowy: {e}")
@@ -112,7 +103,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
-    """Pobiera najświeższe nagłówki z dedykowanego kanału RSS Polsat News"""
+    """Pobiera najświeższe nagłówki z kanału RSS Polsat News"""
     url_rss = "https://polsatnews.pl"
     try:
         response = requests.get(url_rss, timeout=10)
@@ -143,7 +134,10 @@ def pętla_zegara_radiowego():
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
                 "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
-            zapisz_tekst_jako_mp3(komunikat_godzinowy)
+            sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
+            if sciezka and os.path.exists(sciezka):
+                wyslij_do_azuracast(sciezka)
+                os.remove(sciezka)
             ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
@@ -164,7 +158,6 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    # Naprawiona lista dni tygodnia dla koncertu życzeń (4 = Piątek, 5 = Sobota)
     dni_koncertu = [4, 5]
     trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
@@ -177,7 +170,11 @@ def odbierz_sms():
         gatunek = pobierz_aktualny_gatunek_muzyczny()
         komunikat_dj = f"Szybka przerwa w muzyce, w pasmie {gatunek}. Przesyłamy pozdrowienia od słuchacza o imieniu {imie_nadawcy}: {poprawiona_tresc}."
 
-    zapisz_tekst_jako_mp3(komunikat_dj)
+    sciezka = zapisz_tekst_jako_mp3(komunikat_dj)
+    if sciezka and os.path.exists(sciezka):
+        wyslij_do_azuracast(sciezka)
+        os.remove(sciezka)
+        
     return "OK", 200
 
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
@@ -193,8 +190,19 @@ def endpoint_generuj_godzine():
             "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
             "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
-        zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+        
+        # Twój żądany, w pełni zintegrowany i poukładany blok od linii 196
+        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
+            sukces = wyslij_do_azuracast(sciezka_pliku)
+            if os.path.exists(sciezka_pliku):
+                os.remove(sciezka_pliku)
+            if sukces:
+                return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+            else:
+                return {"status": "error", "message": "Błąd wysyłania do AzuraCast"}, 500
+        else:
+            return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
