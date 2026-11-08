@@ -21,7 +21,8 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
+AZURACAST_URL = "https://a7.asurahosting.com"
+# Twój najnowszy, poprawny klucz API dla stacji radiowej
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -29,7 +30,8 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 do AzuraCast, udając prawdziwą przeglądarkę w celu ominięcia Cloudflare"""
+    """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory Cloudflare"""
+    # Nagłówki udające prawdziwy system Windows i przeglądarkę Chrome, aby ominąć Cloudflare 403
     naglowki = {
         "X-API-Key": KLUCZ_API,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -44,13 +46,12 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
             
-            # Zabezpieczona lista kodów HTTP
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
-                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:200]}"
+                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
                 print(f"[AZURACAST BŁĄD] {info_blad}")
                 return False, info_blad
     except Exception as e:
@@ -170,7 +171,6 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    # Zabezpieczona lista dni tygodnia dla koncertu życzeń
     dni_koncertu = [4, 5]
     trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
