@@ -145,7 +145,8 @@ def pętla_zegara_radiowego():
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka and os.path.exists(sciezka):
                 wyslij_do_azuracast(sciezka)
-                os.remove(sciezka)
+                if os.path.exists(sciezka):
+                    os.remove(sciezka)
             ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
@@ -181,7 +182,8 @@ def odbierz_sms():
     sciezka = zapisz_tekst_jako_mp3(komunikat_dj)
     if sciezka and os.path.exists(sciezka):
         wyslij_do_azuracast(sciezka)
-        os.remove(sciezka)
+        if os.path.exists(sciezka):
+            os.remove(sciezka)
         
     return "OK", 200
 
@@ -204,7 +206,7 @@ def endpoint_generuj_godzine():
             sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
-            if sukses:
+            if sukces:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Błąd wysyłania do AzuraCast. Szczegóły: {powod_statusu}"}, 500
