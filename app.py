@@ -49,11 +49,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             else:
                 print(f"[AZURACAST BŁĄD] Serwer zwrócił kod odpowiedzi: {response.status_code} | {response.text}")
                 return False
-    except Exception as e:
-        print(f"[AZURACAST BŁĄD] Wyjątek: {e}")
-        return False
-
-
+    
 def zapisz_tekst_jako_mp3(tekst):
     """Generuje plik MP3 przy użyciu gTTS (Google Cloud) stabilnego dla Render.com"""
     try:
