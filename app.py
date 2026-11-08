@@ -33,12 +33,13 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
             pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
-            # Wskazujemy podfolder 'jingles' na serwerze AzuraCast
             dane = {'path': 'jingles'}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
-            if response.status_code in:
+            # Naprawiona lista poprawnych kodów odpowiedzi HTTP
+            poprawne_kody = [200, 201, 204]
+            if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True
             else:
@@ -63,7 +64,7 @@ def zapisz_tekst_jako_mp3(tekst):
         # AUTOMATYCZNY UPLOAD NA SERWER RADIOWY
         wyslij_do_azuracast(sciezka_pliku)
         
-        # Czyszczenie pamięci tymczasowej w kontenerce Render
+        # Czyszczenie pamięci tymczasowej w kontenerze Render
         if os.path.exists(sciezka_pliku):
             os.remove(sciezka_pliku)
             
@@ -163,7 +164,9 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    trwa_koncert_zyczeń = (teraz.weekday() in [4, 5] and 18 <= teraz.hour < 20)
+    # Naprawiona lista dni tygodnia dla koncertu życzeń (4 = Piątek, 5 = Sobota)
+    dni_koncertu = [4, 5]
+    trwa_koncert_zyczeń = (teraz.weekday() in dni_koncertu and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (0 <= teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
     
     if trwa_koncert_zyczeń:
