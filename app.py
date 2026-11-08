@@ -1,6 +1,6 @@
 from gtts import gTTS
 from datetime import datetime
-from zoneinfo import ZoneInfo  # Dodana biblioteka do obsługi stref czasowych
+from zoneinfo import ZoneInfo
 from flask import Flask, request
 import os
 import re
@@ -22,7 +22,8 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
-KLUCZ_API = "3c8e6877334b308c:06c9fd49b872ee4142f872891d79f83c"
+# Wklejony nowy, poprawny klucz API dedykowany do jingles
+KLUCZ_API = "ac83bc0e9fab71ec:14b3eb1364121576b49a4b2db91b8f3a"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 # Definiujemy na stałe naszą strefę czasową dla bota
@@ -44,13 +45,14 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
-                return True
+                return True, f"Sukces (Kod {response.status_code})"
             else:
-                print(f"[AZURACAST BŁĄD] Serwer zwrócił kod: {response.status_code} | {response.text}")
-                return False
+                info_blad = f"Kod {response.status_code} | Serwer napisał: {response.text}"
+                print(f"[AZURACAST BŁĄD] {info_blad}")
+                return False, info_blad
     except Exception as e:
         print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
-        return False
+        return False, str(e)
     
 def zapisz_tekst_jako_mp3(tekst):
     """Generuje plik MP3 przy użyciu gTTS (Google Cloud) i zwraca jego lokalną ścieżkę"""
@@ -160,7 +162,7 @@ def odbierz_sms():
 
     teraz = datetime.now(STREFA_EUROPA)
     imie_nadawcy = "Słuchacz"
-    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźź]{2,15})', tresc_sms)
+    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
@@ -199,13 +201,13 @@ def endpoint_generuj_godzine():
         
         sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
         if sciezka_pliku and os.path.exists(sciezka_pliku):
-            sukces = wyslij_do_azuracast(sciezka_pliku)
+            sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if sukces:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
-                return {"status": "error", "message": "Błąd wysyłania do AzuraCast"}, 500
+                return {"status": "error", "message": f"Błąd wysyłania do AzuraCast. Szczegóły: {powod_statusu}"}, 500
         else:
             return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
     except Exception as e:
