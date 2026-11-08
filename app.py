@@ -22,8 +22,8 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 # --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
-# TUTAJ JEST TWÓJ KLUCZ DO JINGLES:
-KLUCZ_API = "ac83bc0e9fab71ec:14b3eb1364121576b49a4b2db91b8f3a"
+# Wklejony najnowszy klucz API dedykowany do jingles
+KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
 # Definiujemy na stałe naszą strefę czasową dla bota
@@ -42,7 +42,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane)
             
-            # Bezpieczny zapis tablicy kodów akceptowanych przez serwer
             poprawne_kody = [200, 201, 204]
             if response.status_code in poprawne_kody:
                 print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
@@ -205,7 +204,7 @@ def endpoint_generuj_godzine():
             sukces, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
-            if sukces:
+            if sukses:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Błąd wysyłania do AzuraCast. Szczegóły: {powod_statusu}"}, 500
