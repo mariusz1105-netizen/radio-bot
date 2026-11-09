@@ -19,7 +19,7 @@ if not os.path.exists(FOLDER_AUDIO):
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST ---
+# --- CONFIG AZURACAST (Zgodnie z zaleceniami Mike'a z Asura) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
@@ -29,7 +29,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory Cloudflare"""
+    """Wysyła plik MP3 bezpośrednio na serwer a7, omijając główne filtry Cloudflare"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -167,7 +167,6 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    # Bezpieczne sprawdzanie dni tygodnia bez użycia nawiasów kwadratowych
     dzien_str = str(teraz.weekday())
     trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
@@ -210,9 +209,9 @@ def endpoint_generuj_godzine():
             if wynik_wysylki:
                 return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
-                return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
+                return {"status": "error", "message": f"Blokada ominięcia nieudana. Szczegóły: {powod_statusu}"}, 500
         else:
-            return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
+            return {"status": "error", "message": "Nie udało się wygenerować pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
