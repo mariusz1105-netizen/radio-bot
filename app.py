@@ -36,7 +36,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # Naprawiona struktura paczki - klucz formularza to dokładnie 'file', zgodnie z API AzuraCast
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -221,3 +220,6 @@ def endpoint_generuj_godzine():
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
     except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+if __name__ == '__main__':
