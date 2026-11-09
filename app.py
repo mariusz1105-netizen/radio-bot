@@ -18,9 +18,9 @@ if not os.path.exists(FOLDER_AUDIO):
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST ---
+# --- CONFIG AZURACAST (Poprawiony na zalecany serwer a7) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
+AZURACAST_URL = "https://a7.asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -28,7 +28,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast przez bezpieczną subdomenę a7"""
+    """Automatycznie wysyła plik MP3 do AzuraCast przez serwer a7"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -36,14 +36,10 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            pliki = [
-                ('file', (nazwa_pliku, f, 'audio/mpeg'))
-            ]
-            dane = {
-                'path': 'jingles'
-            }
+            pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
+            dane = {'path': 'jingles'}
             
-            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=20)
+            response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
             
             status_str = str(response.status_code)
             if status_str == "200" or status_str == "201" or status_str == "204":
@@ -214,12 +210,10 @@ def endpoint_generuj_godzine():
                 if wynik_wysylki:
                     return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
                 else:
-                    return {"status": "error", "message": f"Problem z AzuraCast. Szczegoly: {powod_statusu}"}, 500
+                    return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
             else:
                 return {"status": "error", "message": "Nie udalo sie znalezc wygenerowanego pliku audio"}, 500
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
-
-if __name__ == '__main__':
