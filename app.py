@@ -36,7 +36,10 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            pliki = {'file': (nazwa_pliku, f, 'audio/mpeg')}
+            # ROZWIĄZANIE BŁĘDU 500: Zmiana formatu przesyłu słownika na listę krotek (AzuraCast odczyta parametr $file)
+            pliki = [
+                ('file', (nazwa_pliku, f, 'audio/mpeg'))
+            ]
             dane = {'path': 'jingles'}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
@@ -184,9 +187,10 @@ def odbierz_sms():
             wyslij_do_azuracast(sciezka)
             if os.path.exists(sciezka):
                 os.remove(sciezka)
-        
+                
     return "OK", 200
 
+# Dedykowany punkt kontrolny wywoływany z poziomu przeglądarki
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -202,18 +206,15 @@ def endpoint_generuj_godzine():
         )
         
         sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        if sciezka_pliku:
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
+            wynik_wysylki, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
-                wynik_wysylki, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
-                if os.path.exists(sciezka_pliku):
-                    os.remove(sciezka_pliku)
-                if wynik_wysylki:
-                    return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
-                else:
-                    return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
+                os.remove(sciezka_pliku)
+            if wynik_wysylki:
+                return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
-                return {"status": "error", "message": "Nie udalo sie znalezc wygenerowanego pliku audio"}, 500
+                return {"status": "error", "message": f"Problem z AzuraCast. Szczegoly: {powod_statusu}"}, 500
         else:
-            return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
+            return {"status": "error", "message": "Nie udalo sie wygenerowac pliku MP3"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
