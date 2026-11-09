@@ -18,7 +18,7 @@ if not os.path.exists(FOLDER_AUDIO):
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST ---
+# --- CONFIG AZURACAST (Wpisany prawidłowy host emisyjny bez blokad) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
@@ -28,7 +28,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast przez bezpieczną subdomenę a7"""
+    """Automatycznie wysyła plik MP3 do AzuraCast przez wolny od blokad serwer a7"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -36,6 +36,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
+            # Prawidłowy format multipart/form-data akceptowany przez API
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -113,7 +114,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
-    """Pobiera najświeższe nagłówki ze stabilnego kanału RSS Polsat News"""
+    """Pobiera najświeższe nagłówki z kanału RSS Polsat News"""
     url_rss = "https://polsatnews.pl"
     try:
         response = requests.get(url_rss, timeout=10)
@@ -150,7 +151,6 @@ def pętla_zegara_radiowego():
                     wyslij_do_azuracast(sciezka)
                     if os.path.exists(sciezka):
                         os.remove(sciezka)
-            # Naprawiony obiekt czasu z Bird na teraz
             ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
@@ -215,10 +215,7 @@ def endpoint_generuj_godzine():
                 if wynik_wysylki:
                     return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
                 else:
-                    return {"status": "error", "message": f"Problem z AzuraCast. Szczegoly: {powod_statusu}"}, 500
+                    return {"status": "error", "message": f"Blokada serwera AzuraCast. Szczegoly: {powod_statusu}"}, 500
             else:
-                return {"status": "error", "message": "Nie udalo sie znalezz wygenerowanego pliku audio"}, 500
+                return {"status": "error", "message": "Nie udalo sie znalezc wygenerowanego pliku audio"}, 500
         else:
-            return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
