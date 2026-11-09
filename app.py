@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import os
 import re
-import random
 import threading
 import time
 import requests
@@ -53,7 +52,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     except Exception as e:
         print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
         return False, str(e)
-    
+
 def zapisz_tekst_jako_mp3(tekst):
     """Generuje plik MP3 przy użyciu gTTS (Google Cloud) i zwraca jego lokalną ścieżkę"""
     try:
@@ -61,7 +60,6 @@ def zapisz_tekst_jako_mp3(tekst):
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
         
-        # Generowanie profesjonalnego polskiego lektora gTTS
         tts = gTTS(text=tekst, lang='pl', slow=False)
         tts.save(sciezka_pliku)
         
@@ -140,7 +138,7 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dzięwięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka:
@@ -214,12 +212,8 @@ def endpoint_generuj_godzine():
                 else:
                     return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
             else:
-                return {"status": "error", "message": "Nie udalo sie znalezc wygenerowanego pliku audio"}, 500
+                return {"status": "error", "message": "Nie udalo sie znalezz wygenerowanego pliku audio"}, 500
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
-Używaj kodu z rozwagą.
-except Exception as e:
-return {"status": "error", "message": str(e)}, 500
-if name == 'main':
-watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-watek_zegara.start()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
