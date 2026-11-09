@@ -140,13 +140,14 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dzięwięć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-            if sciezka and os.path.exists(sciezka):
-                wyslij_do_azuracast(sciezka)
+            if sciezka:
                 if os.path.exists(sciezka):
-                    os.remove(sciezka)
+                    wyslij_do_azuracast(sciezka)
+                    if os.path.exists(sciezka):
+                        os.remove(sciezka)
             ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
@@ -167,7 +168,6 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
-    # Bezpieczne sprawdzanie dni tygodnia bez użycia nawiasów kwadratowych
     dzien_str = str(teraz.weekday())
     trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
@@ -181,10 +181,11 @@ def odbierz_sms():
         komunikat_dj = f"Szybka przerwa w muzyce, w pasmie {gatunek}. Przesyłamy pozdrowienia od słuchacza o imieniu {imie_nadawcy}: {poprawiona_tresc}."
 
     sciezka = zapisz_tekst_jako_mp3(komunikat_dj)
-    if sciezka and os.path.exists(sciezka):
-        wyslij_do_azuracast(sciezka)
+    if sciezka:
         if os.path.exists(sciezka):
-            os.remove(sciezka)
+            wyslij_do_azuracast(sciezka)
+            if os.path.exists(sciezka):
+                os.remove(sciezka)
         
     return "OK", 200
 
@@ -203,17 +204,22 @@ def endpoint_generuj_godzine():
         )
         
         sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy)
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
-            wynik_wysylki, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
+        if sciezka_pliku:
             if os.path.exists(sciezka_pliku):
-                os.remove(sciezka_pliku)
-            if wynik_wysylki:
-                return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+                wynik_wysylki, powod_statusu = wyslij_do_azuracast(sciezka_pliku)
+                if os.path.exists(sciezka_pliku):
+                    os.remove(sciezka_pliku)
+                if wynik_wysylki:
+                    return {"status": "success", "message": f"Wygenerowano i wysłano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+                else:
+                    return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
             else:
-                return {"status": "error", "message": f"Blokada Cloudflare ominiecie nieudane. Szczegoly: {powod_statusu}"}, 500
+                return {"status": "error", "message": "Nie udalo sie znalezc wygenerowanego pliku audio"}, 500
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerować pliku MP3"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-if __name__ == '__main__':
+Używaj kodu z rozwagą.
+except Exception as e:
+return {"status": "error", "message": str(e)}, 500
+if name == 'main':
+watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+watek_zegara.start()
