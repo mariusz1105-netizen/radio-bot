@@ -1,5 +1,4 @@
 flask
-pyttsx3
 requests
 yt-dlp
 gunicorn
