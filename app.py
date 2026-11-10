@@ -7,7 +7,6 @@ import re
 import threading
 import time
 import requests
-import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
@@ -17,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Poprawiony adres na wolną od blokad subdomenę a7) ---
+# --- CONFIG AZURACAST (Twój działający, sprawdzony serwer emisyjny a7) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -44,7 +43,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany przez port API.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -58,7 +57,7 @@ def zapisz_tekst_jako_mp3(tekst):
     try:
         teraz = datetime.now(STREFA_EUROPA)
         if "godzina" in tekst.lower():
-            nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+            nazwa_pliku = interracial = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         else:
             nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
             
@@ -110,45 +109,18 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-def pobierz_wiadomosci_wp():
-    """Pobiera najświeższe nagłówki z otwartego i bezpiecznego strumienia Wirtualnej Polski"""
-    url_rss = "https://wp.pl"
-    try:
-        response = requests.get(url_rss, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if response.status_code == 200:
-            root = ET.fromstring(response.content)
-            naglowki = []
-            for item in root.findall('.//item'):
-                title = item.find('title')
-                if title is not None and title.text:
-                    clean_title = title.text.strip()
-                    if len(clean_title) > 10 and clean_title not in naglowki:
-                        naglowki.append(clean_title)
-            
-            wybrane = naglowki[:4]
-            if wybrane:
-                serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
-                for i, news in enumerate(wybrane, 1):
-                    serwis += f"Fakt numer {i}: {news}. "
-                serwis += "To były wiadomości z serwisu Wirtualnej Polski. "
-                return serwis
-    except Exception as e:
-        print(f"[BŁĄD RSS WP] Nie udało się sparsować wiadomości: {e}")
-    return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
-
 def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-            tekst_wiadomosci = pobierz_wiadomosci_wp()
 
             komunikat_godzinowy = (
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
-                f"{tekst_wiadomosci} "
+                "Gramy dla Was najlepsze klubowe kawałki bez przerwy! "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt piąć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka:
@@ -183,7 +155,7 @@ def odbierz_sms():
     if trwa_koncert_zyczeń:
         komunikat_dj = f"W studio Radio Strefa Zero trwa właśnie Koncert Życzeń! Mamy nową wiadomość od {imie_nadawcy}. Oto tekst: {poprawiona_tresc}."
     elif trwa_piosenka_na_zyczenie:
-        komunikat_dj = f"Wasz wirtualny prezenter w pasmie Piosenka Na Życzenie. {imie_nadawcy} pisze do nas tak: {poprawiona_tresc}."
+        komunikat_dj = f"Wasz wirtualny prezenter w pasmie Piosenka Na Życzenie. {imie_nadawcy} pisze do us tak: {poprawiona_tresc}."
     else:
         gatunek = pobierz_aktualny_gatunek_muzyczny()
         komunikat_dj = f"Szybka przerwa w muzyce, w pasmie {gatunek}. Przesyłamy pozdrowienia od słuchacza o imieniu {imie_nadawcy}: {poprawiona_tresc}."
@@ -202,11 +174,10 @@ def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        tekst_wiadomosci = pobierz_wiadomosci_wp()
         
         komunikat_godzinowy = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
-            f"{tekst_wiadomosci} "
+            "Gramy dla Was najlepsze klubowe kawałki bez przerwy! "
             "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
             "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
@@ -225,3 +196,9 @@ def endpoint_generuj_godzine():
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
+if __name__ == '__main__':
+    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegar.start()
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
