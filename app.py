@@ -16,16 +16,16 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Twój działający, sprawdzony serwer emisyjny a7) ---
+# --- CONFIG AZURACAST (Bezpośrednie IP przez otwarty port HTTP omijający Cloudflare) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
-URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
+AZURACAST_IP = "141.95.89.206"
+URL_API_CONTENTS = f"http://{AZURACAST_IP}/api/station/{STATION_ID}/file/contents"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast"""
+    """Wysyła plik MP3 jako czyste dane binarne metodą PUT bezpośrednio na IP stacji"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -33,12 +33,14 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
+        "Host": "://asurahosting.com",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
     
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
+            # Uderzamy bezpośrednio na IP bez SSL, co uniemożliwia Cloudflare przechwycenie ruchu
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
             status_str = str(response.status_code)
             
@@ -57,7 +59,7 @@ def zapisz_tekst_jako_mp3(tekst):
     try:
         teraz = datetime.now(STREFA_EUROPA)
         if "godzina" in tekst.lower():
-            nazwa_pliku = interracial = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+            nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         else:
             nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
             
@@ -155,7 +157,7 @@ def odbierz_sms():
     if trwa_koncert_zyczeń:
         komunikat_dj = f"W studio Radio Strefa Zero trwa właśnie Koncert Życzeń! Mamy nową wiadomość od {imie_nadawcy}. Oto tekst: {poprawiona_tresc}."
     elif trwa_piosenka_na_zyczenie:
-        komunikat_dj = f"Wasz wirtualny prezenter w pasmie Piosenka Na Życzenie. {imie_nadawcy} pisze do us tak: {poprawiona_tresc}."
+        komunikat_dj = f"Wasz wirtualny prezenter w pasmie Piosenka Na Życzenie. {imie_nadawcy} pisze do nas tak: {poprawiona_tresc}."
     else:
         gatunek = pobierz_aktualny_gatunek_muzyczny()
         komunikat_dj = f"Szybka przerwa w muzyce, w pasmie {gatunek}. Przesyłamy pozdrowienia od słuchacza o imieniu {imie_nadawcy}: {poprawiona_tresc}."
