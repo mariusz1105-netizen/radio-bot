@@ -144,7 +144,7 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć życzenia siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=True)
             if sciezka and os.path.exists(sciezka):
