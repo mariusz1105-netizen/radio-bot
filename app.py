@@ -8,7 +8,7 @@ import threading
 import time
 import requests
 
-app = Flask(___name___)
+app = Flask(__name__)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
@@ -221,7 +221,7 @@ def endpoint_generuj_godzine():
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
-if __name__ == '___main___':
+if __name__ == '__main__':
     watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
     watek_zegar.start()
     
