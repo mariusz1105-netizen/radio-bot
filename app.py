@@ -8,7 +8,7 @@ import threading
 import time
 import requests
 
-app = Flask(__name__)
+app = Flask(___name___)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
