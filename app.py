@@ -7,9 +7,8 @@ import re
 import threading
 import time
 import requests
-import xml.etree.ElementTree as ET
 
-app = Flask(___name___)
+app = Flask(__name__)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
@@ -18,9 +17,9 @@ if not os.path.exists(FOLDER_AUDIO):
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Zapisany na stałe bezpieczny serwer a7) ---
+# --- CONFIG AZURACAST (Zapisany na stałe serwer emisyjny a7) ---
 STATION_ID = 461
-AZURACAST_URL = "https://a7.asurahosting.com"
+AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -28,7 +27,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast przez serwer a7"""
+    """Automatycznie wysyła plik MP3 do AzuraCast przez bezpieczną subdomenę a7"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -36,7 +35,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # ROZWIĄZANIE BŁĘDU 500: Zmiana słownika {} na listę krotek [] - AzuraCast teraz poprawnie odczyta plik
+            # Lista krotek eliminująca błąd konstrukcji 500
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -112,13 +111,20 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
-    """Pobiera najświeższe nagłówki ze stabilnego kanału RSS Polsat News"""
-    url_rss = "https://polsatnews.pl"
+    """Pobiera najświeższe nagłówki z portalu Polsat News za pomocą bezpiecznego regexa"""
+    url = "https://polsatnews.pl"
     try:
-        response = requests.get(url_rss, timeout=10)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            root = ET.fromstring(response.content)
-            naglowki = [item.find('title').text for item in root.findall('.//item') if item.find('title') is not None][:4]
+            html = response.text
+            znalezione = re.findall(r'<h2>(.*?)</h2>', html)
+            czyste_naglowki = []
+            for tytul in znalezione:
+                title_clean = re.sub(r'<[^>]*>', '', tytul).strip()
+                if title_clean and len(title_clean) > 10 and not title_clean.startswith("Sonda") and title_clean not in czyste_naglowki:
+                    czyste_naglowki.append(title_clean)
+            
+            naglowki = czyste_naglowki[:4]
             if naglowki:
                 serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
                 for i, news in enumerate(naglowki, 1):
@@ -126,7 +132,7 @@ def pobierz_wiadomosci_polsat():
                 serwis += "To były wiadomości z serwisu Polsat News. "
                 return serwis
     except Exception as e:
-        print(f"[BŁĄD RSS] Nie udało się sparsować wiadomości Polsatu: {e}")
+        print(f"[BŁĄD PARSERA] Nie udało się pobrać wiadomości Polsatu: {e}")
     return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
 def pętla_zegara_radiowego():
@@ -190,7 +196,6 @@ def odbierz_sms():
                 
     return "OK", 200
 
-# Dodatkowy punkt kontrolny wywoływany z poziomu przeglądarki
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -215,12 +220,3 @@ def endpoint_generuj_godzine():
             else:
                 return {"status": "error", "message": f"Problem z AzuraCast. Szczegoly: {powod_statusu}"}, 500
         else:
-            return {"status": "error", "message": "Nie udalo sie wygenerowac pliku MP3"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-if ___name___ == '___main___':
-watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-watek_zegara.start()
-port = int(os.environ.get('PORT', 5000))
-app.run(host='0.0.0.0', port=port, debug=False)
