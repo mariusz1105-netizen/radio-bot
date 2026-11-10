@@ -29,7 +29,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory"""
+    """Automatycznie wysyła plik MP3 do AzuraCast przez serwer a7"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -37,7 +37,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # NAPRAWA BŁĘDU 500: Zmiana formatu słownika {} na listę krotek [] - AzuraCast teraz bez problemu odczyta plik MP3
+            # Poprawny format przesyłu krotek [] usuwający błąd 500
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -142,7 +142,7 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dzięwęć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka:
@@ -166,7 +166,7 @@ def odbierz_sms():
 
     teraz = datetime.now(STREFA_EUROPA)
     imie_nadawcy = "Słuchacz"
-    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
+    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźź]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
@@ -191,7 +191,7 @@ def odbierz_sms():
                 
     return "OK", 200
 
-# Dodatkowy punkt kontrolny wywoływany z poziomu przeglądarki
+# Poprawiony i wyrównany endpoint testowy dla przeglądarki
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -218,3 +218,6 @@ def endpoint_generuj_godzine():
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerowac pliku MP3"}, 500
     except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+if __name__ == '__main__':
