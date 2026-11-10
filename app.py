@@ -16,17 +16,16 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Zmienione na otwarty protokół HTTP omijający osłony SSL) ---
+# --- CONFIG AZURACAST (Oryginalna konfiguracja z Twojego pierwszego kodu) ---
 STATION_ID = 461
 AZURACAST_URL = "http://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 
-# Definiujemy na stałe naszą strefę czasową dla bota
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne metodą PUT przez otwarte połączenie HTTP"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -40,12 +39,11 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # Używamy czystego http://, aby ominąć filtry i ekrany sprawdzania
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -111,37 +109,15 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-def pobierz_wiadomosci_polsat():
-    url = "https://polsatnews.pl"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            html = response.text
-            znalezione = re.findall(r'<h2>(.*?)</h2>', html)
-            czyste_naglowki = []
-            for tytul in znalezione:
-                title_clean = re.sub(r'<[^>]*>', '', tytul).strip()
-                if title_clean and len(title_clean) > 10 and not title_clean.startswith("Sonda") and title_clean not in czyste_naglowki:
-                    czyste_naglowki.append(title_clean)
-            
-            naglowki = czyste_naglowki[:4]
-            if naglowki:
-                serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
-                for i, news in enumerate(naglowki, 1):
-                    serwis += f"Fakt numer {i}: {news}. "
-                serwis += "To były wiadomości z serwisu Polsat News. "
-                return serwis
-    except Exception as e:
-        print(f"[BŁĄD PARSERA] Problem z Polsatem: {e}")
-    return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
-
 def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-            tekst_wiadomosci = pobierz_wiadomosci_polsat()
+            
+            # POPRAWKA: Usunięty Polsat News - lektor czyta czysty, stały komunikat stacji
+            tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
             komunikat_godzinowy = (
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
@@ -201,7 +177,9 @@ def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        tekst_wiadomosci = pobierz_wiadomosci_polsat()
+        
+        # POPRAWKA: Stały komunikat stacji również na endpoincie testowym
+        tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
         
         komunikat_godzinowy = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
@@ -226,3 +204,11 @@ def endpoint_generuj_godzine():
 
 @app.route('/', methods=['GET'])
 def strona_startowa():
+    return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
+
+if __name__ == '__main__':
+    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegar.start()
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
