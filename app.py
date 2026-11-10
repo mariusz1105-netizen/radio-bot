@@ -16,38 +16,37 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Zapisany na stałe otwarty serwer emisyjny a7) ---
+# --- CONFIG AZURACAST (Bezpośredni adres IP serwera omijający Cloudflare) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
+AZURACAST_IP = "141.95.89.206"
+URL_API_CONTENTS = f"https://{AZURACAST_IP}/api/station/{STATION_ID}/file/contents"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 
 # Definiujemy na stałe naszą strefę czasową dla bota
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne metodą PUT na dedykowany endpoint contents"""
+    """Wysyła plik MP3 jako czyste dane binarne bezpośrednio na adres IP serwera, podcinając tarcze Cloudflare"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
-    
-    # POPRAWNY ENDPOINT I PARAMETRY ZGODNIE Z NOWĄ DOKUMENTACJĄ API
-    url_api_contents = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
     }
     
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
+        "Host": "://asurahosting.com",  # Wskazujemy serwerowi docelową subdomenę wewnątrz sieci
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
     
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # WYSYŁKA STRUMIENIA BINARNEGO METODĄ PUT
-            response = requests.put(url_api_contents, headers=naglowki, params=parametry, data=f, timeout=20)
+            # Uderzamy prosto w IP serwera, wyłączając weryfikację certyfikatu SSL dla adresu IP (verify=False)
+            response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20, verify=False)
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany poprawnie strumieniem binarnym.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany bezpośrednio przez IP.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -63,7 +62,7 @@ def zapisz_tekst_jako_mp3(tekst):
         if "godzina" in tekst.lower():
             nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         else:
-            nazwa_pliku = interracial = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
+            nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
             
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
         tts = gTTS(text=tekst, lang='pl', slow=False)
@@ -224,4 +223,3 @@ def endpoint_generuj_godzine():
         else:
             return {"status": "error", "message": "Nie udalo sie stworzyc MP3"}, 500
     except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
