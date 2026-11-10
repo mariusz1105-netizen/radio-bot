@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Twój otwarty serwer radiowy a7) ---
+# --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -29,7 +29,6 @@ def strona_glowna():
     return {"status": "online", "message": "Serwer Radio Strefa Zero dziala poprawnie"}, 200
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token z poprawną weryfikacją HTTP"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {'file': f"jingles/{nazwa_pliku}"}
     naglowki = {
@@ -41,7 +40,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
         with open(sciezka_pliku_mp3, 'rb') as f:
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
             if response.status_code in:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} zostal wgrany.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -52,7 +51,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
         return False, str(e)
 
 def pobierz_podklad_muzyczny():
-    """Pobiera plik podkładu z AzuraCast, aby zmiksować go w tle dżingla"""
     sciezka_podkladu = os.path.join(FOLDER_AUDIO, "podklad.mp3")
     if os.path.exists(sciezka_podkladu):
         return sciezka_podkladu
@@ -74,7 +72,10 @@ def pobierz_podklad_muzyczny():
 def zapisz_tekst_jako_mp3(tekst, z_podkladem=False):
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
+        if "godzina" in tekst.lower():
+            nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        else:
+            nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
         
         tts = gTTS(text=tekst, lang='pl', slow=False)
@@ -83,12 +84,12 @@ def zapisz_tekst_jako_mp3(tekst, z_podkladem=False):
         if z_podkladem:
             podklad = pobierz_podklad_muzyczny()
             if podklad and os.path.exists(podklad):
-                print(f"[MUZYKA] Zmiksowano profesjonalny podkład dźwiękowy w tle.")
+                print(f"[MUZYKA] Zmiksowano profesjonalny podklad dzwiekowy w tle.")
                 
         print(f"[RADIO] Wygenerowano plik audio: {sciezka_pliku}")
         return sciezka_pliku
     except Exception as e:
-        print(f"[BŁĄD TTS] Problem z mową: {e}")
+        print(f"[BŁĄD TTS] Problem z mowa: {e}")
         return None
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
@@ -175,7 +176,6 @@ def odbierz_sms():
     
     t_low = tresc_sms.lower()
     
-    # FILTROWANIE SMS (START AUDYCJI OD 17:05)
     wymus_koncert = "koncert" in t_low or "zyczenia" in t_low
     wymus_muzyke = "muzyka na zyczenie" in t_low or "piosenka na zyczenie" in t_low or "muzyka" in t_low
     
@@ -215,3 +215,6 @@ def endpoint_generuj_godzine():
                 os.remove(sciezka_pliku)
             if wynik:
                 return {"status": "success", "message": f"Wygenerowano zapowiedz. Serwer radiowy zwrocil: {status_log}"}, 200
+            else:
+                return {"status": "error", "message": f"Blad przesylania do stacji: {status_log}"}, 500
+        return {"status": "error", "message": "Nie udalo sie stworzyc MP3"}, 500
