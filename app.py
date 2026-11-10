@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import requests
+import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
@@ -16,7 +17,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Oficjalny port API omijający tarcze Cloudflare) ---
+# --- CONFIG AZURACAST (Dokładnie tak, jak miałeś wklejone) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -39,7 +40,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # Uderzamy przez port 2083, który nie wymusza weryfikacji Turnstile i przyjmuje pliki binarne
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
             status_str = str(response.status_code)
             
@@ -110,28 +110,30 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-def pobierz_wiadomosci_polsat():
-    url = "https://polsatnews.pl"
+def pobierz_wiadomosci_polskie_radio():
+    """Pobiera najświeższe nagłówki z całkowicie otwartego kanału Polskiego Radia"""
+    url_rss = "https://polskieradio.pl"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url_rss, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         if response.status_code == 200:
-            html = response.text
-            znalezione = re.findall(r'<h2>(.*?)</h2>', html)
-            czyste_naglowki = []
-            for tytul in znalezione:
-                title_clean = re.sub(r'<[^>]*>', '', tytul).strip()
-                if title_clean and len(title_clean) > 10 and not title_clean.startswith("Sonda") and title_clean not in czyste_naglowki:
-                    czyste_naglowki.append(title_clean)
+            root = ET.fromstring(response.content)
+            naglowki = []
+            for item in root.findall('.//item'):
+                title = item.find('title')
+                if title is not None and title.text:
+                    clean_title = title.text.strip()
+                    if len(clean_title) > 10 and clean_title not in naglowki:
+                        naglowki.append(clean_title)
             
-            naglowki = czyste_naglowki[:4]
-            if naglowki:
+            wybrane = naglowki[:4]
+            if wybrane:
                 serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
-                for i, news in enumerate(naglowki, 1):
+                for i, news in enumerate(wybrane, 1):
                     serwis += f"Fakt numer {i}: {news}. "
-                serwis += "To były wiadomości z serwisu Polsat News. "
+                serwis += "To były wiadomości Polskiego Radia. "
                 return serwis
     except Exception as e:
-        print(f"[BŁĄD PARSERA] Problem z Polsatem: {e}")
+        print(f"[BŁĄD RSS PR] Nie udało się sparsować wiadomości: {e}")
     return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
 def pętla_zegara_radiowego():
@@ -140,7 +142,7 @@ def pętla_zegara_radiowego():
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-            tekst_wiadomosci = pobierz_wiadomosci_polsat()
+            tekst_wiadomosci = pobierz_wiadomosci_polskie_radio()
 
             komunikat_godzinowy = (
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
@@ -200,7 +202,7 @@ def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        tekst_wiadomosci = pobierz_wiadomosci_polsat()
+        tekst_wiadomosci = pobierz_wiadomosci_polskie_radio()
         
         komunikat_godzinowy = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
@@ -224,5 +226,3 @@ def endpoint_generuj_godzine():
         return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
-    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegar.start()
