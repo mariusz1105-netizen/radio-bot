@@ -9,7 +9,7 @@ import time
 import requests
 import xml.etree.ElementTree as ET
 
-app = Flask(__name__)
+app = Flask(___name___)
 
 FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
@@ -219,7 +219,8 @@ def endpoint_generuj_godzine():
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
-if __name__ == '__main__':
+if ___name___ == '___main___':
+    
 watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
 watek_zegara.start()
 port = int(os.environ.get('PORT', 5000))
