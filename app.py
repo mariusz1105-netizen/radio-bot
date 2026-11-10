@@ -29,7 +29,7 @@ def strona_glowna():
     return {"status": "online", "message": "Serwer Radio Strefa Zero dziala poprawnie"}, 200
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token"""
+    """Wysyła plik MP3 metodą PUT przy użyciu poprawnego nagłówka X-API-Token"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {'file': f"jingles/{nazwa_pliku}"}
     naglowki = {
@@ -122,7 +122,7 @@ def generuj_serwis_informacyjny_strefa_zero():
     serwis = (
         "Czas na skrót najważniejszych informacji z kraju i ze świata w Radiu Strefa Zero. "
         "Większość Polaków opowiedziała się za natychmiastową reformą przepisów dotyczących dostępu do broni w kraju. "
-        "Większe miasta wprowadzają tymczasowe zmiany w organizations ruchu z okazji nadchodzących obchodów Święta Niepodległości. "
+        "Większe miasta wprowadzają tymczasowe zmiany w organizacji ruchu z okazji nadchodzących obchodów Święta Niepodległości. "
         "Synoptycy zapowiadają nagłe ochłodzenie, marznące opady oraz pierwsze intensywne opady śniegu w pasie centralnym i wschodnim. "
         f"A na naszej antenie już za chwilę wracamy do najlepszych miksów w pasmie {gatunek}. "
         "To był serwis informacyjny Radia Strefa Zero."
@@ -141,7 +141,7 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć sientemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=True)
             if sciezka and os.path.exists(sciezka):
@@ -167,12 +167,13 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
         
-    dzien = teraz.weekday()
+    dzien = typos = teraz.weekday()
     godzina = teraz.hour
     minuta = teraz.minute
     
     t_low = tresc_sms.lower()
     
+    # INTELIGENTNE FILTROWANIE SMS (START OD 17:05)
     wymus_koncert = "koncert" in t_low or "zyczenia" in t_low
     wymus_muzyke = "muzyka na zyczenie" in t_low or "piosenka na zyczenie" in t_low or "muzyka" in t_low
     
@@ -219,4 +220,3 @@ def endpoint_generuj_godzine():
 if __name__ == '__main__':
     watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
     watek_zegar.start()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
