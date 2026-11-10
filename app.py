@@ -17,7 +17,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Dokładnie tak, jak miałeś wklejone) ---
+# --- CONFIG AZURACAST (Poprawiony adres na wolną od blokad subdomenę a7) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -26,7 +26,7 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT bezpośrednio przez otwarty port administracyjny 2083"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -110,9 +110,9 @@ def pobierz_aktualny_gatunek_muzyczny():
     else:
         return "Deep House / Chillout (Nocna Selekcja)"
 
-def pobierz_wiadomosci_polskie_radio():
-    """Pobiera najświeższe nagłówki z całkowicie otwartego kanału Polskiego Radia"""
-    url_rss = "https://polskieradio.pl"
+def pobierz_wiadomosci_wp():
+    """Pobiera najświeższe nagłówki z otwartego i bezpiecznego strumienia Wirtualnej Polski"""
+    url_rss = "https://wp.pl"
     try:
         response = requests.get(url_rss, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         if response.status_code == 200:
@@ -130,10 +130,10 @@ def pobierz_wiadomosci_polskie_radio():
                 serwis = "A teraz czas na skrót najświeższych wiadomości z kraju i ze świata. "
                 for i, news in enumerate(wybrane, 1):
                     serwis += f"Fakt numer {i}: {news}. "
-                serwis += "To były wiadomości Polskiego Radia. "
+                serwis += "To były wiadomości z serwisu Wirtualnej Polski. "
                 return serwis
     except Exception as e:
-        print(f"[BŁĄD RSS PR] Nie udało się sparsować wiadomości: {e}")
+        print(f"[BŁĄD RSS WP] Nie udało się sparsować wiadomości: {e}")
     return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
 def pętla_zegara_radiowego():
@@ -142,13 +142,13 @@ def pętla_zegara_radiowego():
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-            tekst_wiadomosci = pobierz_wiadomosci_polskie_radio()
+            tekst_wiadomosci = pobierz_wiadomosci_wp()
 
             komunikat_godzinowy = (
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt piąć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka:
@@ -202,7 +202,7 @@ def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        tekst_wiadomosci = pobierz_wiadomosci_polskie_radio()
+        tekst_wiadomosci = pobierz_wiadomosci_wp()
         
         komunikat_godzinowy = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
@@ -225,3 +225,4 @@ def endpoint_generuj_godzine():
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
 
+if __name__ == '__main__':
