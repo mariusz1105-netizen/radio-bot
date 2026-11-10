@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Bezpośredni adres IP serwera omijający Cloudflare) ---
+# --- CONFIG AZURACAST (Bezpośredni adres IP serwerów bez blokad) ---
 STATION_ID = 461
 AZURACAST_IP = "141.95.89.206"
 URL_API_CONTENTS = f"https://{AZURACAST_IP}/api/station/{STATION_ID}/file/contents"
@@ -26,7 +26,7 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne bezpośrednio na adres IP serwera, podcinając tarcze Cloudflare"""
+    """Wysyła plik MP3 jako czyste dane binarne bezpośrednio na adres IP serwera"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -34,14 +34,13 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
-        "Host": "://asurahosting.com",  # Wskazujemy serwerowi docelową subdomenę wewnątrz sieci
+        "Host": "://asurahosting.com",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
     
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # Uderzamy prosto w IP serwera, wyłączając weryfikację certyfikatu SSL dla adresu IP (verify=False)
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20, verify=False)
             status_str = str(response.status_code)
             
@@ -223,3 +222,8 @@ def endpoint_generuj_godzine():
         else:
             return {"status": "error", "message": "Nie udalo sie stworzyc MP3"}, 500
     except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+if __name__ == '__main__':
+    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegar.start()
