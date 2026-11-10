@@ -25,7 +25,7 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT bezpośrednio do AzuraCast"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -110,7 +110,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polskie_radio():
-    """Pobiera wiadomości z Polskiego Radia w zastępstwie za Polsat"""
+    """Pobiera wiadomości z Polskiego Radia za pomocą czystego dopasowania nagłówków h2"""
     url = "https://polskieradio.pl"
     try:
         response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
@@ -227,4 +227,15 @@ def endpoint_generuj_godzine():
 def strona_startowa():
     return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
 
-if __name__ == '__main__':
+Używaj kodu z rozwagą.
+if name == 'main':
+watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+watek_zegar.start()
+port = int(os.environ.get('PORT', 5000))
+app.run(host='0.0.0.0', port=port, debug=False)
+
+Wszystkie Twoje cogodzinne powiadomienia oraz piątkowy alert na BuyCoffee i HEOS o 17:47 są bez zmian bezpiecznie aktywne w tle aplikacji.
+
+<FollowUp>
+Podmień zawartość pliku na GitHubie na ten czysty kod i wybierz na Renderze **Manual Deploy -> Clear build cache & deploy**. Gdy wdrożenie zakończy się sukcesem i pokaże status **Live**, odśwież link testowy `https://onrender.com` w przeglądarce i napisz, czy tym razem pokazało się upragnione **success**!
+</FollowUp>
