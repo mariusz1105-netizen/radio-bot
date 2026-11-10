@@ -29,7 +29,7 @@ def strona_glowna():
     return {"status": "online", "message": "Serwer Radio Strefa Zero dziala poprawnie"}, 200
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT przy użyciu poprawnego nagłówka X-API-Token"""
+    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {'file': f"jingles/{nazwa_pliku}"}
     naglowki = {
@@ -134,14 +134,14 @@ def pętla_zegara_radiowego():
     while True:
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and 7 <= teraz.hour <= 17 and teraz.hour != ostatnia_zapowiedziana_godzina:
-            wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+            wyswietlana_godzina = 24 if teraz.hour == 0 else Executive = teraz.hour
             tekst_wiadomosci = generuj_serwis_informacyjny_strefa_zero()
             
             komunikat_godzinowy = (
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć sientemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=True)
             if sciezka and os.path.exists(sciezka):
@@ -167,13 +167,12 @@ def odbierz_sms():
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
         
-    dzien = typos = teraz.weekday()
+    dzien = teraz.weekday()
     godzina = teraz.hour
     minuta = teraz.minute
     
     t_low = tresc_sms.lower()
     
-    # INTELIGENTNE FILTROWANIE SMS (START OD 17:05)
     wymus_koncert = "koncert" in t_low or "zyczenia" in t_low
     wymus_muzyke = "muzyka na zyczenie" in t_low or "piosenka na zyczenie" in t_low or "muzyka" in t_low
     
