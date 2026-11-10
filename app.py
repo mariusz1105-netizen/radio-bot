@@ -134,7 +134,7 @@ def pętla_zegara_radiowego():
     while True:
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and 7 <= teraz.hour <= 17 and teraz.hour != ostatnia_zapowiedziana_godzina:
-            wyswietlana_godzina = 24 if teraz.hour == 0 else Executive = teraz.hour
+            wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             tekst_wiadomosci = generuj_serwis_informacyjny_strefa_zero()
             
             komunikat_godzinowy = (
@@ -219,3 +219,4 @@ def endpoint_generuj_godzine():
 if __name__ == '__main__':
     watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
     watek_zegar.start()
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
