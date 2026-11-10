@@ -220,7 +220,6 @@ def endpoint_generuj_godzine():
         return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
-Używaj kodu z rozwagą.
 watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
 watek_zegara.start()
 port = int(os.environ.get('PORT', 5000))
