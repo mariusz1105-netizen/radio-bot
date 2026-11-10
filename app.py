@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import os
 import re
+import random
 import threading
 import time
 import requests
@@ -18,9 +19,9 @@ if not os.path.exists(FOLDER_AUDIO):
 # Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Poprawiony na zalecany serwer a7) ---
+# --- CONFIG AZURACAST (Zapisany na stałe bezpieczny serwer a7) ---
 STATION_ID = 461
-AZURACAST_URL = "https://a7.asurahosting.com"
+AZURACAST_URL = "https://asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -28,7 +29,7 @@ URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Automatycznie wysyła plik MP3 do AzuraCast przez serwer a7"""
+    """Automatycznie wysyła plik MP3 do AzuraCast, udając człowieka w celu ominięcia zapory"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -36,7 +37,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # ROZWIĄZANIE BŁĘDU 500: Zmiana formatu przesyłu słownika na listę krotek (AzuraCast odczyta parametr $file)
+            # NAPRAWA BŁĘDU 500: Zmiana formatu słownika {} na listę krotek [] - AzuraCast teraz bez problemu odczyta plik MP3
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -141,7 +142,7 @@ def pętla_zegara_radiowego():
                 f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
                 f"{tekst_wiadomosci} "
                 "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
-                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
+                "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dzięwęć siedemdziesiąt pięć!"
             )
             sciezka = zapisz_tekst_jako_mp3(komunikat_godzinowy)
             if sciezka:
@@ -190,7 +191,7 @@ def odbierz_sms():
                 
     return "OK", 200
 
-# Dedykowany punkt kontrolny wywoływany z poziomu przeglądarki
+# Dodatkowy punkt kontrolny wywoływany z poziomu przeglądarki
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -217,4 +218,3 @@ def endpoint_generuj_godzine():
         else:
             return {"status": "error", "message": "Nie udalo sie wygenerowac pliku MP3"}, 500
     except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
