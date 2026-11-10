@@ -40,8 +40,16 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
-            return response.status_code in, response.text
+            status_str = str(response.status_code)
+            if status_str in ["200", "201", "204"]:
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
+                return True, f"Sukces (Kod {response.status_code})"
+            else:
+                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
+                print(f"[AZURACAST BŁĄD] {info_blad}")
+                return False, info_blad
     except Exception as e:
+        print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
         return False, str(e)
 
 def pobierz_podklad_muzyczny():
@@ -71,7 +79,6 @@ def zapisz_tekst_jako_mp3(tekst, z_podkladem=False):
         tts = gTTS(text=tekst, lang='pl', slow=False)
         tts.save(sciezka_pliku)
         
-        # Jeśli wymagany jest profesjonalny podkład pod serwis informacyjny
         if z_podkladem:
             podklad = pobierz_podklad_muzyczny()
             if podklad and os.path.exists(podklad):
@@ -132,7 +139,6 @@ def pętla_zegara_radiowego():
     ostatnia_zapowiedziana_godzina = -1
     while True:
         teraz = datetime.now(STREFA_EUROPA)
-        # ZEGAR OD GODZINY 7:00 DO 17:00 OD PONIEDZIAŁKU DO NIEDZIELI
         if teraz.minute == 0 and 7 <= teraz.hour <= 17 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             tekst_wiadomosci = pobierz_wiadomosci_polskie_radio()
@@ -170,7 +176,6 @@ def odbierz_sms():
     
     t_low = tresc_sms.lower()
     
-    # INTELIGENTNE SPRAWDZANIE AUDYCJI PO DOPISKACH LUB CZASIE REALNYM
     wymus_koncert = "koncert" in t_low or "zyczenia" in t_low
     wymus_muzyke = "muzyka na zyczenie" in t_low or "piosenka na zyczenie" in t_low or "muzyka" in t_low
     
@@ -204,8 +209,8 @@ def endpoint_generuj_godzine():
         sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=True)
         if sciezka_pliku and os.path.exists(sciezka_pliku):
             wynik, _ = wyslij_do_azuracast(sciezka_pliku)
-            os.remove(sciezka_pliku)
-            if wynik: return {"status": "success", "message": "Prawidlowo wygenerowano i zmiksowano zapowiedz"}, 200
+            if wynik:
+                return {"status": "success", "message": "Prawidlowo wygenerowano i zmiksowano zapowiedz"}, 200
         return {"status": "error", "message": "Problem z AzuraCast"}, 500
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
