@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST ---
+# --- CONFIG AZURACAST (Twój otwarty serwer radiowy a7) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -29,20 +29,19 @@ def strona_glowna():
     return {"status": "online", "message": "Serwer Radio Strefa Zero dziala poprawnie"}, 200
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token"""
+    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token z poprawną weryfikacją HTTP"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {'file': f"jingles/{nazwa_pliku}"}
     naglowki = {
         "X-API-Token": KLUCZ_API,
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
     try:
         with open(sciezka_pliku_mp3, 'rb') as f:
             response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
-            status_str = str(response.status_code)
-            if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} zostal wgrany.")
+            if response.status_code in:
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -58,10 +57,13 @@ def pobierz_podklad_muzyczny():
     if os.path.exists(sciezka_podkladu):
         return sciezka_podkladu
     try:
-        naglowki = {"X-API-Token": KLUCZ_API}
+        naglowki = {
+            "X-API-Token": KLUCZ_API,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         parametry = {'file': 'jingles/podklad.mp3'}
         res = requests.get(URL_API_CONTENTS, headers=naglowki, params=parametry, timeout=15)
-        if res.status_code == 200:
+        if res.status_code in:
             with open(sciezka_podkladu, 'wb') as f:
                 f.write(res.content)
             return sciezka_podkladu
@@ -81,12 +83,12 @@ def zapisz_tekst_jako_mp3(tekst, z_podkladem=False):
         if z_podkladem:
             podklad = pobierz_podklad_muzyczny()
             if podklad and os.path.exists(podklad):
-                print(f"[MUZYKA] Zmiksowano profesjonalny podklad dzwiekowy w tle.")
+                print(f"[MUZYKA] Zmiksowano profesjonalny podkład dźwiękowy w tle.")
                 
         print(f"[RADIO] Wygenerowano plik audio: {sciezka_pliku}")
         return sciezka_pliku
     except Exception as e:
-        print(f"[BŁĄD TTS] Problem z mowa: {e}")
+        print(f"[BŁĄD TTS] Problem z mową: {e}")
         return None
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
@@ -148,7 +150,7 @@ def pętla_zegara_radiowego():
                 wyslij_do_azuracast(sciezka)
                 if os.path.exists(sciezka):
                     os.remove(sciezka)
-            ostatnia_zapowiedziana_godzina = axes = teraz.hour
+            ostatnia_zapowiedziana_godzina = teraz.hour
         time.sleep(20)
 
 @app.route('/sms', methods=['POST'])
@@ -173,6 +175,7 @@ def odbierz_sms():
     
     t_low = tresc_sms.lower()
     
+    # FILTROWANIE SMS (START AUDYCJI OD 17:05)
     wymus_koncert = "koncert" in t_low or "zyczenia" in t_low
     wymus_muzyke = "muzyka na zyczenie" in t_low or "piosenka na zyczenie" in t_low or "muzyka" in t_low
     
@@ -205,18 +208,10 @@ def endpoint_generuj_godzine():
             f"{tekst_wiadomosci} "
             "Zapraszamy na serwis informacyjny w Radiu Strefa Zero."
         )
-        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=False)
+        sciezka_pliku = zapisz_tekst_jako_mp3(komunikat_godzinowy, z_podkladem=True)
         if sciezka_pliku and os.path.exists(sciezka_pliku):
-            wynik, _ = wyslij_do_azuracast(sciezka_pliku)
+            wynik, status_log = wyslij_do_azuracast(sciezka_pliku)
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if wynik:
-                return {"status": "success", "message": "Prawidlowo wygenerowano zapowiedz"}, 200
-        return {"status": "error", "message": "Problem z AzuraCast"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-if __name__ == '__main__':
-    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegar.start()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+                return {"status": "success", "message": f"Wygenerowano zapowiedz. Serwer radiowy zwrocil: {status_log}"}, 200
