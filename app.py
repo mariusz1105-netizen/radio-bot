@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import os
 import re
-import random
 import threading
 import time
 import requests
@@ -21,7 +20,7 @@ PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
 # --- CONFIG AZURACAST (Zapisany na stałe bezpieczny serwer a7) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
+AZURACAST_URL = "https://a7.asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
@@ -37,7 +36,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # Poprawny format przesyłu krotek [] usuwający błąd 500
+            # ROZWIĄZANIE BŁĘDU 500: Zmiana słownika {} na listę krotek [] - AzuraCast teraz poprawnie odczyta plik
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
@@ -166,7 +165,7 @@ def odbierz_sms():
 
     teraz = datetime.now(STREFA_EUROPA)
     imie_nadawcy = "Słuchacz"
-    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźź]{2,15})', tresc_sms)
+    match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
     
@@ -191,7 +190,7 @@ def odbierz_sms():
                 
     return "OK", 200
 
-# Poprawiony i wyrównany endpoint testowy dla przeglądarki
+# Dodatkowy punkt kontrolny wywoływany z poziomu przeglądarki
 @app.route('/generuj-godzine', methods=['GET', 'POST'])
 def endpoint_generuj_godzine():
     try:
@@ -221,3 +220,8 @@ def endpoint_generuj_godzine():
         return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
+Używaj kodu z rozwagą.
+watek_zegara = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+watek_zegara.start()
+port = int(os.environ.get('PORT', 5000))
+app.run(host='0.0.0.0', port=port, debug=False)
