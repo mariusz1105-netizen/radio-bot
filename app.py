@@ -14,17 +14,20 @@ FOLDER_AUDIO = "nagrania_sms"
 if not os.path.exists(FOLDER_AUDIO):
     os.makedirs(FOLDER_AUDIO)
 
+# Plik do zapisywania brakujących piosenek od słuchaczy
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Zapisany na stałe wolny od blokad serwer a7) ---
+# --- CONFIG AZURACAST (Zapisany na stałe serwer emisyjny a7) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
-URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
+AZURACAST_URL = "https://a7.asurahosting.com"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
+URL_API_FILES = f"{AZURACAST_URL}/api/station/{STATION_ID}/files"
 
+# Definiujemy na stałe naszą strefę czasową dla bota
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
+    """Automatycznie wysyła plik MP3 do AzuraCast przez serwer a7"""
     naglowki = {
         "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -32,17 +35,17 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     try:
         nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
         with open(sciezka_pliku_mp3, 'rb') as f:
-            # POPRAWKA BŁĘDU 500: Przesyłanie jako lista krotek [] zamiast słownika
+            # POPRAWKA: Przesyłanie jako lista krotek [] - AzuraCast teraz bez problemu odczyta plik
             pliki = [
                 ('file', (nazwa_pliku, f, 'audio/mpeg'))
             ]
             dane = {'path': 'jingles'}
             
             response = requests.post(URL_API_FILES, headers=naglowki, files=pliki, data=dane, timeout=15)
-            status_str = str(response.status_code)
             
+            status_str = str(response.status_code)
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} przesłany do chmury stacji {STATION_ID}.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -51,22 +54,21 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
     except Exception as e:
         print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
         return False, str(e)
-
+    
 def zapisz_tekst_jako_mp3(tekst):
+    """Generuje plik MP3 przy użyciu gTTS i zwraca jego lokalną ścieżkę"""
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        if "godzina" in tekst.lower():
-            nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
-        else:
-            nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
-            
+        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3") if "godzina" in tekst.lower() else teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = os.path.join(FOLDER_AUDIO, nazwa_pliku)
+        
         tts = gTTS(text=tekst, lang='pl', slow=False)
         tts.save(sciezka_pliku)
-        print(f"[RADIO] Wygenerowano plik audio: {sciezka_pliku}")
+        
+        print(f"[RADIO] Chmura wygenerowała plik audio: {sciezka_pliku}")
         return sciezka_pliku
     except Exception as e:
-        print(f"[BŁĄD CHMURY TTS] Problem z mową: {e}")
+        print(f"[BŁĄD CHMURY TTS] Problem z generowaniem mowy: {e}")
         return None
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
@@ -77,7 +79,7 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
     except Exception as e:
-        print(f"[BŁĄD LOGÓW] Problem z zapisem pliku: {e}")
+        print(f"[BŁĄD LOGÓW] Problem z zapisem do pliku tekstowego: {e}")
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
@@ -109,6 +111,7 @@ def pobierz_aktualny_gatunek_muzyczny():
         return "Deep House / Chillout (Nocna Selekcja)"
 
 def pobierz_wiadomosci_polsat():
+    """Pobiera najświeższe nagłówki z portalu Polsat News za pomocą bezpiecznego regexa"""
     url = "https://polsatnews.pl"
     try:
         response = requests.get(url, timeout=10)
@@ -129,7 +132,7 @@ def pobierz_wiadomosci_polsat():
                 serwis += "To były wiadomości z serwisu Polsat News. "
                 return serwis
     except Exception as e:
-        print(f"[BŁĄD PARSERA] Problem z Polsatem: {e}")
+        print(f"[BŁĄD PARSERA] Nie udało się pobrać wiadomości Polsatu: {e}")
     return "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
 def pętla_zegara_radiowego():
@@ -137,7 +140,7 @@ def pętla_zegara_radiowego():
     while True:
         teraz = datetime.now(STREFA_EUROPA)
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
-            wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+            wyswietlana_godzina = 24 if teraz.hour == 0 else Executive = teraz.hour
             tekst_wiadomosci = pobierz_wiadomosci_polsat()
 
             komunikat_godzinowy = (
@@ -216,14 +219,3 @@ def endpoint_generuj_godzine():
                 return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Problem z AzuraCast: {powod_statusu}"}, 500
-        else:
-            return {"status": "error", "message": "Nie udalo sie stworzyc MP3"}, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-if __name__ == '__main__':
-    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegar.start()
-    
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
