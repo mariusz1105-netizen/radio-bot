@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Poprawny i otwarty serwer emisyjny a7) ---
+# --- CONFIG AZURACAST ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -29,11 +29,11 @@ def strona_glowna():
     return {"status": "online", "message": "Serwer Radio Strefa Zero dziala poprawnie"}, 200
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT przy użyciu poprawnego nagłówka X-API-Token"""
+    """Wysyła plik MP3 metodą PUT przy użyciu nagłówka X-API-Token"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {'file': f"jingles/{nazwa_pliku}"}
     naglowki = {
-        "X-API-Token": KLUCZ_API,  # POPRAWKA: Właściwy nagłówek wymagany przez API AzuraCast
+        "X-API-Token": KLUCZ_API,
         "User-Agent": "Mozilla/5.0",
         "Content-Type": "application/octet-stream"
     }
@@ -122,7 +122,7 @@ def generuj_serwis_informacyjny_strefa_zero():
     serwis = (
         "Czas na skrót najważniejszych informacji z kraju i ze świata w Radiu Strefa Zero. "
         "Większość Polaków opowiedziała się za natychmiastową reformą przepisów dotyczących dostępu do broni w kraju. "
-        "Większe miasta wprowadzają tymczasowe zmiany w organizacji ruchu z okazji nadchodzących obchodów Święta Niepodległości. "
+        "Większe miasta wprowadzają tymczasowe zmiany w organizations ruchu z okazji nadchodzących obchodów Święta Niepodległości. "
         "Synoptycy zapowiadają nagłe ochłodzenie, marznące opady oraz pierwsze intensywne opady śniegu w pasie centralnym i wschodnim. "
         f"A na naszej antenie już za chwilę wracamy do najlepszych miksów w pasmie {gatunek}. "
         "To był serwis informacyjny Radia Strefa Zero."
@@ -217,3 +217,6 @@ def endpoint_generuj_godzine():
         return {"status": "error", "message": str(e)}, 500
 
 if __name__ == '__main__':
+    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegar.start()
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
