@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane prosto z okienek, które ustawiłeś na Renderze) ---
+# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś w panelu Render) ---
 STATION_ID = 461
 AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
@@ -83,7 +83,7 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
 def inteligentna_korekta(tekst):
     t = tekst.lower()
     slownik_poprawek = {
-        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "żyčymy",
+        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
         "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
         "dzien": "dzień", "urodziny": "urodziny", "urodzin": "urodzin",
         "dziekuje": "dziękuję", "dzieki": "dzięki", "sie": "się", "ze": "że",
@@ -192,7 +192,7 @@ def endpoint_generuj_godzine():
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if wynik_wysylki:
-                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}. Serwer odpowiedzial: {powod_statusu}"}, 200
             else:
                 return {"status": "error", "message": f"Problem z AzuraCast: {powod_statusu}"}, 500
         else:
@@ -205,8 +205,8 @@ def strona_startowa():
     return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
 
 if __name__ == '__main__':
-    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_zegar.start()
+    watek_generuj = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_generuj.start()
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
