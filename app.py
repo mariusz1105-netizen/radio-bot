@@ -16,17 +16,16 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś na Renderze) ---
+# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś w panelu Render) ---
 STATION_ID = 461
 AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 
-# Definiujemy na stałe naszą strefę czasową dla bota
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne metodą PUT bezpośrednio do AzuraCast"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast przy użyciu X-API-Token"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -44,7 +43,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
