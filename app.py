@@ -16,9 +16,9 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Poprawiony bezpośredni adres Twojego serwera) ---
+# --- CONFIG AZURACAST (Oryginalna konfiguracja z Twojego pierwszego kodu) ---
 STATION_ID = 461
-AZURACAST_URL = "https://asurahosting.com"
+AZURACAST_URL = "http://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 
@@ -26,14 +26,14 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne metodą PUT bezpośrednio na Twój serwer radiowy"""
+    """Wysyła plik MP3 jako czyste dane binarne metodą PUT przez otwarte połączenie HTTP"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
     }
     
     naglowki = {
-        "X-API-Token": KLUCZ_API,  # POPRAWKA: Oficjalny nagłówek uwierzytelniania omijający Cloudflare
+        "Authorization": f"Bearer {KLUCZ_API}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
@@ -117,7 +117,7 @@ def pętla_zegara_radiowego():
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             
-            # POPRAWKA: Usunięty Polsat News zgodnie z Twoim żądaniem
+            # Usunięty Polsat News - lektor czyta czysty, stały komunikat stacji
             tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
             komunikat_godzinowy = (
@@ -177,7 +177,7 @@ def odbierz_sms():
 def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        wyswietlana_godzina = 24 if teraz.hour == 0 else Executive = teraz.hour
+        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         
         tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
         
