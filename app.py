@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane prosto z okienek, które ustawiłeś na Renderze) ---
+# --- CONFIG AZURACAST (Pobiera dane bezpośrednio z wprowadzonych przez Ciebie kluczy na Renderze) ---
 STATION_ID = 461
 AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
@@ -25,7 +25,7 @@ URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast przy użyciu X-API-Token"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
