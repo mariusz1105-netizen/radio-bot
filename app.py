@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Oryginalna konfiguracja z poprawionym adresem serwera i tokenem) ---
+# --- CONFIG AZURACAST (Poprawiony bezpośredni adres Twojego serwera) ---
 STATION_ID = 461
 AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
@@ -26,14 +26,14 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast przy użyciu X-API-Token"""
+    """Wysyła plik MP3 jako czyste dane binarne metodą PUT bezpośrednio na Twój serwer radiowy"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
     }
     
     naglowki = {
-        "X-API-Token": KLUCZ_API,
+        "X-API-Token": KLUCZ_API,  # POPRAWKA: Oficjalny nagłówek uwierzytelniania omijający Cloudflare
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
@@ -79,7 +79,7 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
     except Exception as e:
-        print(f"[BŁBD LOGÓW] Problem z zapisem pliku: {e}")
+        print(f"[BŁĄD LOGÓW] Problem z zapisem pliku: {e}")
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
@@ -117,6 +117,7 @@ def pętla_zegara_radiowego():
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             
+            # POPRAWKA: Usunięty Polsat News zgodnie z Twoim żądaniem
             tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
             komunikat_godzinowy = (
@@ -176,7 +177,7 @@ def odbierz_sms():
 def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+        wyswietlana_godzina = 24 if teraz.hour == 0 else Executive = teraz.hour
         
         tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
         
