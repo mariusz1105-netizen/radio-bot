@@ -16,16 +16,17 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś w panelu Render) ---
+# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś na Renderze) ---
 STATION_ID = 461
 AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 
+# Definiujemy na stałe naszą strefę czasową dla bota
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast przy użyciu X-API-Token"""
+    """Wysyła plik MP3 jako czyste dane binarne metodą PUT bezpośrednio do AzuraCast"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
@@ -43,7 +44,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -192,7 +193,7 @@ def endpoint_generuj_godzine():
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if wynik_wysylki:
-                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}. Serwer odpowiedzial: {powod_statusu}"}, 200
+                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
             else:
                 return {"status": "error", "message": f"Problem z AzuraCast: {powod_statusu}"}, 500
         else:
@@ -205,8 +206,8 @@ def strona_startowa():
     return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
 
 if __name__ == '__main__':
-    watek_generuj = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
-    watek_generuj.start()
+    watek_zegar = threading.Thread(target=pętla_zegara_radiowego, daemon=True)
+    watek_zegar.start()
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
