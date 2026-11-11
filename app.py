@@ -16,9 +16,9 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Oryginalna konfiguracja z Twojego pierwszego kodu) ---
+# --- CONFIG AZURACAST (Poprawiony bezpośredni serwer a7 oraz dedykowany Token) ---
 STATION_ID = 461
-AZURACAST_URL = "http://asurahosting.com"
+AZURACAST_URL = "https://asurahosting.com"
 URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
 KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 
@@ -26,14 +26,14 @@ KLUCZ_API = "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44"
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 jako czyste dane binarne metodą PUT przez otwarte połączenie HTTP"""
+    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio na Twój serwer radiowy"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     parametry = {
         'file': f"jingles/{nazwa_pliku}"
     }
     
     naglowki = {
-        "Authorization": f"Bearer {KLUCZ_API}",
+        "X-API-Token": KLUCZ_API,  # Właściwy nagłówek autoryzacji dla Twojej stacji
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Content-Type": "application/octet-stream"
     }
@@ -44,7 +44,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3):
             status_str = str(response.status_code)
             
             if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany na antenę.")
+                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany.")
                 return True, f"Sukces (Kod {response.status_code})"
             else:
                 info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
@@ -117,7 +117,6 @@ def pętla_zegara_radiowego():
         if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
             wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
             
-            # Usunięty Polsat News - lektor czyta czysty, stały komunikat stacji
             tekst_wiadomosci = "Na antenie Radio Strefa Zero gramy dla Was najlepsze klubowe kawałki bez przerwy! "
 
             komunikat_godzinowy = (
