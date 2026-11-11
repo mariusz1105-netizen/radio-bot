@@ -6,7 +6,7 @@ import os
 import re
 import threading
 import time
-import requests
+import paramiko
 
 app = Flask(__name__)
 
@@ -16,42 +16,38 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane z okienek, które ustawiłeś w panelu Render) ---
-STATION_ID = 461
-AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
-KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
-URL_API_CONTENTS = f"{AZURACAST_URL}/api/station/{STATION_ID}/file/contents"
+# --- CONFIG SFTP AZURACAST (Bezpośrednie połączenie z pominięciem Cloudflare) ---
+SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
+SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
+SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
+SFTP_PASS = os.environ.get("SFTP_PASS", "")
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 def wyslij_do_azuracast(sciezka_pliku_mp3):
-    """Wysyła plik MP3 metodą PUT jako czyste dane binarne bezpośrednio do AzuraCast przy użyciu X-API-Token"""
+    """Wysyła plik MP3 bezpośrednio na dysk radia przez SFTP omijając blokady sieciowe"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
-    parametry = {
-        'file': f"jingles/{nazwa_pliku}"
-    }
+    sciezka_zdalna = f"jingles/{nazwa_pliku}"
     
-    naglowki = {
-        "X-API-Token": KLUCZ_API,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/octet-stream"
-    }
-    
+    transport = None
+    sftp = None
     try:
-        with open(sciezka_pliku_mp3, 'rb') as f:
-            response = requests.put(URL_API_CONTENTS, headers=naglowki, params=parametry, data=f, timeout=20)
-            status_str = str(response.status_code)
-            
-            if status_str in ["200", "201", "204"]:
-                print(f"[AZURACAST] Sukces! Plik {nazwa_pliku} został przesłany.")
-                return True, f"Sukces (Kod {response.status_code})"
-            else:
-                info_blad = f"Kod {response.status_code} | Odpowiedz serwera: {response.text[:250]}"
-                print(f"[AZURACAST BŁĄD] {info_blad}")
-                return False, info_blad
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        transport.connect(username=SFTP_USER, password=SFTP_PASS)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        
+        sftp.put(sciezka_pliku_mp3, sciezka_zdalna)
+        print(f"[SFTP AZURACAST] Sukces! Plik {nazwa_pliku} został wgrany do folderu jingles.")
+        return True, f"Sukces SFTP: {nazwa_pliku}"
     except Exception as e:
-        print(f"[AZURACAST BŁĄD] Wyjątek podczas wysyłania: {e}")
-        return False, str(e)
+        info_blad = f"Błąd SFTP: {str(e)}"
+        print(f"[SFTP BŁĄD] {info_blad}")
+        return False, info_blad
+    finally:
+        if sftp:
+            sftp.close()
+        if transport:
+            transport.close()
 
 def zapisz_tekst_jako_mp3(tekst):
     try:
@@ -182,7 +178,7 @@ def endpoint_generuj_godzine():
         komunikat_godzinowy = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
             f"{tekst_wiadomosci} "
-            "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia? "
+            "Chcesz wziąć udział w Koncercie Życzeń, zamówić ulubioną piosenkę lub przesłać pozdrowienia dla bliskich? "
             "Napisz SMS na naszą linię pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć!"
         )
         
@@ -192,9 +188,9 @@ def endpoint_generuj_godzine():
             if os.path.exists(sciezka_pliku):
                 os.remove(sciezka_pliku)
             if wynik_wysylki:
-                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}"}, 200
+                return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wyswietlana_godzina}. {powod_statusu}"}, 200
             else:
-                return {"status": "error", "message": f"Problem z AzuraCast: {powod_statusu}"}, 500
+                return {"status": "error", "message": f"Problem z przesylaniem: {powod_statusu}"}, 500
         else:
             return {"status": "error", "message": "Nie udalo sie stworzyc MP3"}, 500
     except Exception as e:
