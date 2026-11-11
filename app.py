@@ -16,7 +16,7 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG AZURACAST (Pobiera dane bezpośrednio z wprowadzonych przez Ciebie kluczy na Renderze) ---
+# --- CONFIG AZURACAST (Pobiera dane prosto z okienek, które ustawiłeś na Renderze) ---
 STATION_ID = 461
 AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://asurahosting.com")
 KLUCZ_API = os.environ.get("AZURACAST_API_KEY", "c20a5b4c41c9418b:0c570fe85b23303c51ad93fe7c983b44")
@@ -83,7 +83,7 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
 def inteligentna_korekta(tekst):
     t = tekst.lower()
     slownik_poprawek = {
-        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
+        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "żyčymy",
         "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
         "dzien": "dzień", "urodziny": "urodziny", "urodzin": "urodzin",
         "dziekuje": "dziękuję", "dzieki": "dzięki", "sie": "się", "ze": "że",
