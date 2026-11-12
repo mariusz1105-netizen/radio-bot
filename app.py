@@ -18,31 +18,35 @@ FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
     os.makedirs(FOLDER_ROBOCZY)
 
+# --- CONFIG SFTP AZURACAST (65.108.225.39:2022) ---
 SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
 SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
 SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
 SFTP_PASS = os.environ.get("SFTP_PASS", "")
 
+# Foldery na dysku AzuraCast
 DIR_JINGLES = "jingles"
 DIR_MAGAZYN = "magazyn_zyczen"
 DIR_POBRANE = "pobrane_od_sluchaczy"
 PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
 PLIK_BRAKUJACE_ZDALNY = f"{DIR_MAGAZYN}/brakujace_piosenki.txt"
 
+# Głosy prezenterów
 GLOS_KOBIETA = "pl-PL-ZofiaNeural"
 GLOS_MEZCZYZNA = "pl-PL-MarekNeural"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
-KONCERT_ZYCZEN_DNI = [4, 5]
+# --- KONFIGURACJA RAMÓWKI (Możliwość łatwego przedłużenia audycji) ---
+KONCERT_ZYCZEN_DNI = [4, 5]  # 4 = Piątek, 5 = Sobota
 KONCERT_ZYCZEN_START = 18
 KONCERT_ZYCZEN_KONIEC = 20
 
-PIOSENKA_NA_ZYCZENIE_DNI = [0, 1, 2, 3, 4]
+PIOSENKA_NA_ZYCZENIE_DNI = [0, 1, 2, 3, 4]  # Poniedziałek - Piątek
 PIOSENKA_NA_ZYCZENIE_START = 17
 PIOSENKA_NA_ZYCZENIE_KONIEC = 18
 
-ODSTEP_EMISJI_SEKUNDY = 420
+ODSTEP_EMISJI_SEKUNDY = 420  # 7 minut (420 sekund) między kolejnymi paczkami
 
 def polacz_sftp():
     transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
@@ -89,9 +93,11 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 os.remove(temp_f)
 
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
+    """Przeszukuje wszystkie foldery muzyczne na dysku radia w poszukiwaniu pliku MP3"""
     slowa_kluczowe = [s.lower() for s in re.findall(r'\w+', zapytanie) if len(s) > 2]
     if not slowa_kluczowe:
         return None
+    
     foldery_do_sprawdzenia = [DIR_POBRANE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", "."]
     for folder in foldery_do_sprawdzenia:
         try:
@@ -106,6 +112,7 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     return None
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
+    """Pobiera utwór przez yt-dlp i konwertuje go do MP3 przy użyciu ffmpeg"""
     sciezka_wyjsciowa = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     opcje_ytdlp = {
         'format': 'bestaudio/best',
@@ -222,6 +229,7 @@ def zbuduj_zapowiedz_godzinowa(aktualna_godzina_24h):
     return [(GLOS_KOBIETA, pelny_tekst)]
 
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
+    """Przetwarza SMS w tle: szuka/pobiera piosenkę, nagrywa głos i dodaje do kolejki odpowiedniej audycji"""
     transport = None
     sftp = None
     try:
@@ -230,6 +238,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         znacznik_czasu = teraz.strftime("%Y%m%d_%H%M%S")
         t_low = tresc_sms.lower()
 
+        # Rozpoznanie audycji na podstawie słowa-klucza na początku
         if "koncert" in t_low:
             typ_audycji = "koncert"
             czysta_tresc = re.sub(r'(?i)^koncert\s*życzeń[:\-\s]*|^koncert\s*zyczen[:\-\s]*', '', tresc_sms).strip()
@@ -243,12 +252,4 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         imie_nadawcy = "Słuchacza"
         match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', czysta_tresc)
         if match_podpis:
-        imie_nadawcy = match_podpis.group(1).capitalize()
-
-        zapytanie_muzyczne = re.sub(r'[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}', '', czysta_tresc).strip()
-        czy_zamowiono_piosenke = (typ_audycji == "piosenka") or ("piosenk" in t_low) or ("zagraj" in t_low) or ("utwór" in t_low)
-
-        sciezka_piosenki_na_dysku = None
-        if czy_zamowiono_piosenke and len(zapytanie_muzyczne) > 2:
-            sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
-            if not sciezka_piosenki_na_dysku:  
+            imie_nadawcy = match_podpis.group(1).capitalize()
