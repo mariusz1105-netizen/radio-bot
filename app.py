@@ -245,4 +245,4 @@ def endpoint_generuj_godzine():
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         kwestia = zbuduj_zapowiedz_godzinowa(teraz.hour)
         sciezka_pliku = generuj_audio_mp3(kwestia, nazwa_pliku)
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
+        if sciezka_pliku and os.path.exists(sciezka_pliku)
