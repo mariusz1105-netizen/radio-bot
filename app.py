@@ -179,8 +179,6 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
     finally:
         if os.path.exists(lokalny):
             os.remove(lokalny)
-
-
 def pobierz_wiadomosci_rss():
     try:
         feed = feedparser.parse("https://rmf24.pl")
@@ -272,3 +270,129 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         poprawiona = inteligentna_korekta(czysta)
         if typ_audycji == "koncert":
             kwestie = [
+                (GLOS_KOBIETA, f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń! Napisał do nas {imie}."),
+                (GLOS_MEZCZYZNA, f"Świetnie Zofia, już przejmuję mikrofon i czytam! Oto treść wiadomości: {poprawiona}."),
+                (GLOS_KOBIETA, "Dziękujemy za udział w Koncercie Życzeń! Pozdrawiamy gorąco i gramy dalej w Radiu Strefa Zero!")
+            ]
+        else:
+            kwestie = [
+                (GLOS_MEZCZYZNA, f"Zofia, spójrz na naszą linię SMS. W paśmie Piosenka na Życzenie odezwał się {imie}."),
+                (GLOS_KOBIETA, f"Już przekazuję dalej na antenę! Nasz słuchacz pisze tak: {poprawiona}."),
+                (GLOS_MEZCZYZNA, "Świetny wybór! Zostajemy w klimacie Piosenki na Życzenie w Radiu Strefa Zero.")
+            ]
+
+        nazwa_glosu = f"wiadomosc_{znacznik}.mp3"
+        lokalny_glos = generuj_audio_mp3(kwestie, nazwa_glosu)
+        if lokalny_glos and os.path.exists(lokalny_glos):
+            zdalny_glos = f"{DIR_MAGAZYN}/{nazwa_glosu}"
+            sftp.put(lokalny_glos, zdalny_glos)
+            os.remove(lokalny_glos)
+            kolejka = wczytaj_kolejke_sftp(sftp)
+            kolejka.append({
+                "audycja": typ_audycji,
+                "czas_zgloszenia": time.time(),
+                "plik_glos": zdalny_glos,
+                "plik_piosenka": sciezka_piosenki
+            })
+            zapisz_kolejke_sftp(sftp, kolejka)
+    except Exception as e:
+        print(f"Blad przetwarzania SMS: {e}")
+    finally:
+        if sftp:
+            sftp.close()
+        if transport:
+            transport.close()
+
+
+def petla_zegara_i_emisji():
+    ostatnia_godzina = -1
+    ostatnia_emisja = 0
+    while True:
+        try:
+            teraz = datetime.now(STREFA_EUROPA)
+            dzien = teraz.weekday()
+            godzina = teraz.hour
+            teraz_ts = time.time()
+
+            if teraz.minute == 0 and godzina != ostatnia_godzina:
+                transport, sftp = polacz_sftp()
+                try:
+                    for p in sftp.listdir(DIR_JINGLES):
+                        if p.startswith("godzina_") and p.endswith(".mp3"):
+                            sftp.remove(f"{DIR_JINGLES}/{p}")
+                    nazwa = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+                    sciezka = generuj_audio_mp3(zbuduj_zapowiedz_godzinowa(godzina), nazwa)
+                    if sciezka and os.path.exists(sciezka):
+                        sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa}")
+                        os.remove(sciezka)
+                finally:
+                    sftp.close()
+                    transport.close()
+                ostatnia_godzina = godzina
+
+            aktywna = None
+            if dzien in KONCERT_ZYCZEN_DNI and KONCERT_ZYCZEN_START <= godzina < KONCERT_ZYCZEN_KONIEC:
+                aktywna = "koncert"
+            elif dzien in PIOSENKA_NA_ZYCZENIE_DNI and PIOSENKA_NA_ZYCZENIE_START <= godzina < PIOSENKA_NA_ZYCZENIE_KONIEC:
+                aktywna = "piosenka"
+
+            if aktywna and (teraz_ts - ostatnia_emisja >= ODSTEP_EMISJI_SEKUNDY):
+                transport, sftp = polacz_sftp()
+                try:
+                    kolejka = wczytaj_kolejke_sftp(sftp)
+                    paczka = next((el for el in kolejka if el.get("audycja") == aktywna), None)
+                    if paczka:
+                        for p in sftp.listdir(DIR_JINGLES):
+                            if p.startswith("wiadomosc_") and p.endswith(".mp3"):
+                                sftp.remove(f"{DIR_JINGLES}/{p}")
+                        nazwa_g = os.path.basename(paczka["plik_glos"])
+                        sftp.rename(paczka["plik_glos"], f"{DIR_JINGLES}/{nazwa_g}")
+                        if paczka.get("plik_piosenka"):
+                            lok_utwor = os.path.join(FOLDER_ROBOCZY, "emisja_utwor.mp3")
+                            sftp.get(paczka["plik_piosenka"], lok_utwor)
+                            sftp.put(lok_utwor, f"{DIR_JINGLES}/wiadomosc_utwor_{int(teraz_ts)}.mp3")
+                            if os.path.exists(lok_utwor):
+                                os.remove(lok_utwor)
+                        kolejka.remove(paczka)
+                        zapisz_kolejke_sftp(sftp, kolejka)
+                        ostatnia_emisja = teraz_ts
+                finally:
+                    sftp.close()
+                    transport.close()
+        except Exception as e:
+            print(f"Blad petli: {e}")
+        time.sleep(15)
+
+
+threading.Thread(target=petla_zegara_i_emisji, daemon=True).start()
+
+
+@app.route('/sms', methods=['POST'])
+def odbierz_sms():
+    tresc = request.form.get('Body', '')
+    nadawca = request.form.get('From', 'Nieznany')
+    if not czy_wiadomosc_bezpieczna(tresc):
+        return "OK", 200
+    threading.Thread(target=przetworz_sms_w_tle, args=(tresc, nadawca), daemon=True).start()
+    return "OK", 200
+
+
+@app.route('/generuj-godzine', methods=['GET', 'POST'])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        wysw = 24 if teraz.hour == 0 else teraz.hour
+        nazwa = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        sciezka = generuj_audio_mp3(zbuduj_zapowiedz_godzinowa(teraz.hour), nazwa)
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                for p in sftp.listdir(DIR_JINGLES):
+                    if p.startswith("godzina_") and p.endswith(".mp3"):
+                        sftp.remove(f"{DIR_JINGLES}/{p}")
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return {"status": "success", "message": f"Wygenerowano zapowiedz dla godziny {wysw}."}, 200
