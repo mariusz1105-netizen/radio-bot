@@ -191,4 +191,3 @@ def endpoint_generuj_godzine():
 def strona_startowa():
     return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
 
-if __name__ == '__main__':
