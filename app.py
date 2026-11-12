@@ -249,3 +249,4 @@ def odbierz_sms():
             (GLOS_MEZCZYZNA, "Świetny wybór! Zostajemy w klimacie Piosenki na Życzenie w Radiu Strefa Zero.")
         ]
     else:
+        
