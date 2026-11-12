@@ -54,7 +54,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             return sciezka_koncowa
         return None
     except Exception as e:
-        print(f"Błąd TTS: {e}")
+        print(f"Blad TTS: {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -80,7 +80,7 @@ def wyslij_do_azuracast(sciezka_pliku_mp3, czy_godzina=False):
         sftp.put(sciezka_pliku_mp3, sciezka_zdalna)
         return True, f"Sukces SFTP: {nazwa_pliku}"
     except Exception as e:
-        return False, f"Błąd SFTP: {str(e)}"
+        return False, f"Blad SFTP: {str(e)}"
     finally:
         if sftp:
             sftp.close()
@@ -98,23 +98,23 @@ def pobierz_wiadomosci_rss():
                 if tytul:
                     naglowki.append(tytul)
             if naglowki:
-                tekst = "Oto najważniejsze informacje z kraju i ze świata. "
+                tekst = "Oto najwazniejsze informacje z kraju i ze swiata. "
                 for i, h in enumerate(naglowki, 1):
-                    tekst += f"Wiadomość numer {i}: {h}. "
+                    tekst += f"Wiadomosc numer {i}: {h}. "
                 return tekst
     except Exception as e:
-        print(f"Błąd RSS: {e}")
+        print(f"Blad RSS: {e}")
     return "Na naszej antenie gramy dla Was najlepsze przeboje bez przerwy! "
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
     try:
         teraz = datetime.now(STREFA_EUROPA)
         czas_wpisu = teraz.strftime("%Y-%m-%d %H:%M:%S")
-        wpis = f"[{czas_wpisu}] Od: {numer_nadawcy} | Treść: {tresc_sms}\n"
+        wpis = f"[{czas_wpisu}] Od: {numer_nadawcy} | Tresc: {tresc_sms}\n"
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
     except Exception as e:
-        print(f"Błąd logów: {e}")
+        print(f"Blad logow: {e}")
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
@@ -183,7 +183,7 @@ def petla_zegara_radiowego():
                         os.remove(sciezka)
                 ostatnia_zapowiedziana_godzina = teraz.hour
         except Exception as e:
-            print(f"Błąd zegara: {e}")
+            print(f"Blad zegara: {e}")
         time.sleep(15)
 
 watek_zegar = threading.Thread(target=petla_zegara_radiowego, daemon=True)
@@ -206,7 +206,7 @@ def odbierz_sms():
         imie_nadawcy = match_podpis.group(1).capitalize()
 
     dzien_str = str(teraz.weekday())
-    trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
+    trwa_koncert_zyczen = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
 
     gatunek = pobierz_aktualny_gatunek_muzyczny()
@@ -214,7 +214,7 @@ def odbierz_sms():
         (GLOS_KOBIETA, f"Szybka przerwa w muzyce w paśmie {gatunek}. Przesyłamy pozdrowienia od {imie_nadawcy}: {poprawiona_tresc}. Wracamy do grania!")
     ]
 
-    if trwa_koncert_zyczeń:
+    if trwa_koncert_zyczen:
         kwestie_audio = [
             (GLOS_KOBIETA, f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń! Napisał do nas {imie_nadawcy}."),
             (GLOS_MEZCZYZNA, f"Świetnie Zofia, już przejmuję mikrofon i czytam! Oto treść wiadomości: {poprawiona_tresc}."),
@@ -245,4 +245,4 @@ def endpoint_generuj_godzine():
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         kwestia = zbuduj_zapowiedz_godzinowa(teraz.hour)
         sciezka_pliku = generuj_audio_mp3(kwestia, nazwa_pliku)
-        if sciezka_pliku and os.path.exists(sciezka_pliku)
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
