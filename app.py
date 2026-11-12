@@ -252,3 +252,4 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         imie_nadawcy = "Słuchacza"
         match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', czysta_tresc)
         if match_podpis:
+            imie_nadawcy = match_podpis.group(1).capitalize()  
