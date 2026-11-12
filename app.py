@@ -18,13 +18,11 @@ if not os.path.exists(FOLDER_AUDIO):
 
 PLIK_BRAKUJACE = "brakujace_piosenki.txt"
 
-# --- CONFIG SFTP AZURACAST (65.108.225.39:2022) ---
 SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
 SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
 SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
 SFTP_PASS = os.environ.get("SFTP_PASS", "")
 
-# Głosy prezenterów
 GLOS_KOBIETA = "pl-PL-ZofiaNeural"
 GLOS_MEZCZYZNA = "pl-PL-MarekNeural"
 
@@ -35,14 +33,11 @@ async def _generuj_segment_async(tekst, glos, plik_wyjsciowy):
     await communicate.save(plik_wyjsciowy)
 
 def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
-    """Generuje plik MP3 dla jednego głosu lub dialogu dwóch prezenterów."""
     sciezka_koncowa = os.path.join(FOLDER_AUDIO, nazwa_pliku_koncowego)
     pliki_tymczasowe = []
-    
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
         for idx, (glos, tekst) in enumerate(lista_kwestii):
             if not tekst or not tekst.strip():
                 continue
@@ -50,19 +45,16 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             loop.run_until_complete(_generuj_segment_async(tekst, glos, temp_path))
             if os.path.exists(temp_path):
                 pliki_tymczasowe.append(temp_path)
-                
         loop.close()
-        
         if pliki_tymczasowe:
             with open(sciezka_koncowa, 'wb') as outfile:
                 for temp_f in pliki_tymczasowe:
                     with open(temp_f, 'rb') as infile:
                         outfile.write(infile.read())
-            print(f"[RADIO AUDIO] Wygenerowano plik: {sciezka_koncowa}")
             return sciezka_koncowa
         return None
     except Exception as e:
-        print(f"[BŁĄD TTS] Problem z generowaniem głosu: {e}")
+        print(f"Błąd TTS: {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -70,32 +62,25 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 os.remove(temp_f)
 
 def wyslij_do_azuracast(sciezka_pliku_mp3, czy_godzina=False):
-    """Wysyła plik MP3 przez SFTP i czyści stare godziny, aby AutoDJ grał zawsze najnowszy plik"""
     nazwa_pliku = os.path.basename(sciezka_pliku_mp3)
     sciezka_zdalna = f"jingles/{nazwa_pliku}"
-    
     transport = None
     sftp = None
     try:
         transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
         transport.connect(username=SFTP_USER, password=SFTP_PASS)
         sftp = paramiko.SFTPClient.from_transport(transport)
-        
         if czy_godzina:
             try:
                 for stary_plik in sftp.listdir("jingles"):
                     if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
                         sftp.remove(f"jingles/{stary_plik}")
             except Exception as clean_err:
-                print(f"[SFTP INFO] Pominięto czyszczenie: {clean_err}")
-                
+                print(f"Info czyszczenia: {clean_err}")
         sftp.put(sciezka_pliku_mp3, sciezka_zdalna)
-        print(f"[SFTP AZURACAST] Sukces! Plik {nazwa_pliku} wgrany na serwer.")
         return True, f"Sukces SFTP: {nazwa_pliku}"
     except Exception as e:
-        info_blad = f"Błąd SFTP: {str(e)}"
-        print(f"[SFTP BŁĄD] {info_blad}")
-        return False, info_blad
+        return False, f"Błąd SFTP: {str(e)}"
     finally:
         if sftp:
             sftp.close()
@@ -103,7 +88,6 @@ def wyslij_do_azuracast(sciezka_pliku_mp3, czy_godzina=False):
             transport.close()
 
 def pobierz_wiadomosci_rss():
-    """Pobiera 3 najnowsze nagłówki z kanału RSS RMF24"""
     url_rss = "https://rmf24.pl"
     try:
         feed = feedparser.parse(url_rss)
@@ -119,7 +103,7 @@ def pobierz_wiadomosci_rss():
                     tekst += f"Wiadomość numer {i}: {h}. "
                 return tekst
     except Exception as e:
-        print(f"[BŁĄD RSS] Problem z pobraniem wiadomości: {e}")
+        print(f"Błąd RSS: {e}")
     return "Na naszej antenie gramy dla Was najlepsze przeboje bez przerwy! "
 
 def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
@@ -130,7 +114,7 @@ def zapisz_brakujacy_utwor(tresc_sms, numer_nadawcy):
         with open(PLIK_BRAKUJACE, "a", encoding="utf-8") as f:
             f.write(wpis)
     except Exception as e:
-        print(f"[BŁĄD LOGÓW] Problem z zapisem pliku: {e}")
+        print(f"Błąd logów: {e}")
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
@@ -151,32 +135,24 @@ def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
     return any(l in "aąeęioóuy" for l in t_lower)
 
 def pobierz_aktualny_gatunek_muzyczny():
-    """Dopasowanie nazwy pasma do Twojej dokładnej ramówki"""
     godzina = datetime.now(STREFA_EUROPA).hour
     if 6 <= godzina < 15:
         return "Najlepsze Hity Radiowe"
-    elif 15 <= godzina < 17:
+    if 15 <= godzina < 17:
         return "Italo Disco"
-    elif 17 <= godzina < 18:
+    if 17 <= godzina < 18:
         return "Piosenka na Życzenie"
-    elif 18 <= godzina < 20:
+    if 18 <= godzina < 20:
         return "Disco Polo"
-    elif 20 <= godzina < 21:
+    if 20 <= godzina < 21:
         return "Muzyka Mix"
-    else:
-        return "Muzyka Klubowa"
+    return "Muzyka Klubowa"
 
 def zbuduj_zapowiedz_godzinowa(aktualna_godzina_24h):
-    """
-    Od 06:00 do 16:00 włącznie: Godzina + Wiadomości RSS + Reklama ramówki.
-    Od 17:00 do 05:00: Godzina + Reklama ramówki (bez wiadomości).
-    """
     wyswietlana_godzina = 24 if aktualna_godzina_24h == 0 else aktualna_godzina_24h
-    
+    sekcja_wiadomosci = ""
     if 6 <= aktualna_godzina_24h <= 16:
         sekcja_wiadomosci = pobierz_wiadomosci_rss()
-    else:
-        sekcja_wiadomosci = ""
 
     reklama_ramowki = (
         "Przypominamy o naszych audycjach prowadzonych przez Zofię i Marka! "
@@ -184,7 +160,6 @@ def zbuduj_zapowiedz_godzinowa(aktualna_godzina_24h):
         "Natomiast w każdy piątek i sobotę od osiemnastej do dwudziestej gramy dla Was wielki Koncert Życzeń! "
         "Wyślij SMS pod numer: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć."
     )
-    
     pelny_tekst = (
         f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
         f"{sekcja_wiadomosci} "
@@ -201,7 +176,6 @@ def petla_zegara_radiowego():
             if teraz.minute == 0 and teraz.hour != ostatnia_zapowiedziana_godzina:
                 nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
                 kwestia = zbuduj_zapowiedz_godzinowa(teraz.hour)
-                
                 sciezka = generuj_audio_mp3(kwestia, nazwa_pliku)
                 if sciezka and os.path.exists(sciezka):
                     wyslij_do_azuracast(sciezka, czy_godzina=True)
@@ -209,7 +183,7 @@ def petla_zegara_radiowego():
                         os.remove(sciezka)
                 ostatnia_zapowiedziana_godzina = teraz.hour
         except Exception as e:
-            print(f"[BŁĄD ZEGARA] {e}")
+            print(f"Błąd zegara: {e}")
         time.sleep(15)
 
 watek_zegar = threading.Thread(target=petla_zegara_radiowego, daemon=True)
@@ -219,7 +193,6 @@ watek_zegar.start()
 def odbierz_sms():
     tresc_sms = request.form.get('Body', '')
     numer_nadawcy = request.form.get('From', 'Nieznany')
-    
     if not czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc_sms):
         return "OK", 200
 
@@ -231,22 +204,45 @@ def odbierz_sms():
     match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', tresc_sms)
     if match_podpis:
         imie_nadawcy = match_podpis.group(1).capitalize()
-    
+
     dzien_str = str(teraz.weekday())
     trwa_koncert_zyczeń = ((dzien_str == "4" or dzien_str == "5") and 18 <= teraz.hour < 20)
     trwa_piosenka_na_zyczenie = (teraz.weekday() <= 4 and 17 <= teraz.hour < 18)
-    
+
+    gatunek = pobierz_aktualny_gatunek_muzyczny()
+    kwestie_audio = [
+        (GLOS_KOBIETA, f"Szybka przerwa w muzyce w paśmie {gatunek}. Przesyłamy pozdrowienia od {imie_nadawcy}: {poprawiona_tresc}. Wracamy do grania!")
+    ]
+
     if trwa_koncert_zyczeń:
         kwestie_audio = [
             (GLOS_KOBIETA, f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń! Napisał do nas {imie_nadawcy}."),
             (GLOS_MEZCZYZNA, f"Świetnie Zofia, już przejmuję mikrofon i czytam! Oto treść wiadomości: {poprawiona_tresc}."),
             (GLOS_KOBIETA, "Dziękujemy za udział w Koncercie Życzeń! Pozdrawiamy gorąco i gramy dalej w Radiu Strefa Zero!")
         ]
-    elif trwa_piosenka_na_zyczenie:
+
+    if trwa_piosenka_na_zyczenie:
         kwestie_audio = [
             (GLOS_MEZCZYZNA, f"Zofia, spójrz na naszą linię SMS. W paśmie Piosenka na Życzenie odezwał się {imie_nadawcy}."),
             (GLOS_KOBIETA, f"Już przekazuję dalej na antenę! Nasz słuchacz pisze tak: {poprawiona_tresc}."),
             (GLOS_MEZCZYZNA, "Świetny wybór! Zostajemy w klimacie Piosenki na Życzenie w Radiu Strefa Zero.")
         ]
-    else:
-        
+
+    nazwa_pliku = teraz.strftime("wiadomosc_%Y%m%d_%H%M%S.mp3")
+    sciezka = generuj_audio_mp3(kwestie_audio, nazwa_pliku)
+    if sciezka and os.path.exists(sciezka):
+        wyslij_do_azuracast(sciezka, czy_godzina=False)
+        if os.path.exists(sciezka):
+            os.remove(sciezka)
+
+    return "OK", 200
+
+@app.route('/generuj-godzine', methods=['GET', 'POST'])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        kwestia = zbuduj_zapowiedz_godzinowa(teraz.hour)
+        sciezka_pliku = generuj_audio_mp3(kwestia, nazwa_pliku)
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
