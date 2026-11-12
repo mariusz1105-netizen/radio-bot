@@ -243,7 +243,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         imie_nadawcy = "Słuchacza"
         match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', czysta_tresc)
         if match_podpis:
-            imie_nadawcy = match_podpis.group(1).capitalize()
+        imie_nadawcy = match_podpis.group(1).capitalize()
 
         zapytanie_muzyczne = re.sub(r'[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}', '', czysta_tresc).strip()
         czy_zamowiono_piosenke = (typ_audycji == "piosenka") or ("piosenk" in t_low) or ("zagraj" in t_low) or ("utwór" in t_low)
@@ -251,4 +251,4 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         sciezka_piosenki_na_dysku = None
         if czy_zamowiono_piosenke and len(zapytanie_muzyczne) > 2:
             sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
-            if not sciezka_piosenki_na_dysku: 
+            if not sciezka_piosenki_na_dysku:  
