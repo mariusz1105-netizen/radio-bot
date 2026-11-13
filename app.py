@@ -1,4 +1,4 @@
-import os
+plimport os
 import re
 import json
 import time
@@ -353,7 +353,7 @@ def petla_zegara_i_emisji():
             elif trwa_piosenka:
                 aktywna_audycja = "piosenka"
 
-            if aktywna_audycja and (obecny_ts - ostatnia_e_timestamp >= ODSTEP_EMISJI_SEKUNDY):
+                       if aktywna_audycja and (obecny_ts - ostatnia_e_timestamp >= ODSTEP_EMISJI_SEKUNDY):
                 transport, sftp = polacz_sftp()
                 try:
                     kolejka = wczytaj_kolejke_sftp(sftp)
