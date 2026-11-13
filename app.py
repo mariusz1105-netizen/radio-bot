@@ -390,3 +390,39 @@ watek_glowny.start()
 
 @app.route('/sms', methods=['POST'])
 def odbierz_sms():
+    tresc_sms = request.form.get('Body', '')
+    numer_nadawcy = request.form.get('From', 'Nieznany')
+    if not czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc_sms):
+        return "OK", 200
+    watek_sms = threading.Thread(target=przetworz_sms_w_tle, args=(tresc_sms, numer_nadawcy), daemon=True)
+    watek_sms.start()
+    return "OK", 200
+
+
+@app.route('/generuj-godzine', methods=['GET', 'POST'])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        sciezka_pliku = generuj_audio_mp3(zbuduj_zapowiedz_godzinowa(teraz.hour), nazwa_pliku)
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
+            transport, sftp = polacz_sftp()
+            try:
+                for stary_plik in sftp.listdir(DIR_JINGLES):
+                    if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
+                        sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
+                sftp.put(sciezka_pliku, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka_pliku)
+            return {"status": "success", "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}."}, 200
+        return {"status": "error", "message": "Nie udalo sie stworzec pliku MP3"}, 500
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+
+@app.route('/', methods=['GET'])
+def strona_startowa():
+    return {"status": "online", "message": "Radio-bot dziala poprawnie"}, 200
