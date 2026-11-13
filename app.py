@@ -11,9 +11,6 @@ import paramiko
 import edge_tts
 import feedparser
 import yt_dlp
-import static_ffmpeg
-
-static_ffmpeg.add_paths()
 
 app = Flask(__name__)
 
