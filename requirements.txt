@@ -5,4 +5,3 @@ gunicorn
 paramiko
 edge-tts
 feedparser
-static-ffmpeg
