@@ -271,4 +271,4 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         poprawiona = inteligentna_korekta(czysta)
         if typ_audycji == "koncert":
-            kwestie = [
+            kwestie = 
