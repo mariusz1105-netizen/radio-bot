@@ -1,12 +1,12 @@
-import os
-import re
-import json
-import time
-import asyncio
-import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request
+import os
+import re
+import json
+import threading
+import time
+import asyncio
 import paramiko
 import edge_tts
 import feedparser
@@ -34,6 +34,7 @@ PLIK_BRAKUJACE_ZDALNY = f"{DIR_MAGAZYN}/brakujace_piosenki.txt"
 
 GLOS_KOBIETA = "pl-PL-ZofiaNeural"
 GLOS_MEZCZYZNA = "pl-PL-MarekNeural"
+
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 KONCERT_ZYCZEN_DNI = (4, 5)
@@ -66,7 +67,7 @@ async def _generuj_segment_async(tekst, glos, plik_wyjsciowy):
 
 def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
-    pliki_tymczasowe = []
+    pliki_tymczasowe = list()
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -95,97 +96,108 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
 
 
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
-    slowa = [s.lower() for s in re.findall(r'\w+', zapytanie) if len(s) > 2]
-    if not slowa:
+    slowa_kluczowe = list()
+    for s in re.findall(r'\w+', zapytanie):
+        if len(s) > 2:
+            slowa_kluczowe.append(s.lower())
+    if not slowa_kluczowe:
         return None
-    foldery = (DIR_POBRANE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
-    for folder in foldery:
+
+    foldery_do_sprawdzenia = (DIR_POBRANE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
+    for folder in foldery_do_sprawdzenia:
         try:
-            for plik in sftp.listdir(folder):
+            pliki = sftp.listdir(folder)
+            for plik in pliki:
                 if plik.lower().endswith(".mp3"):
-                    if all(sl in plik.lower() for sl in slowa):
+                    nazwa_bez_rozsz = plik.lower()
+                    if all(slowo in nazwa_bez_rozsz for slowo in slowa_kluczowe):
                         return f"{folder}/{plik}" if folder != "." else plik
         except Exception:
             continue
     return None
 
 
-def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa):
-    sciezka = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa)
-    opcje = {
-        'format': 'bestaudio/best',
-        'outtmpl': f"{sciezka}.%(ext)s",
-        'default_search': 'ytsearch1',
-        'noplaylist': True,
-        'quiet': True,
-        'socket_timeout': 20,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-    }
+def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
+    sciezka_wyjsciowa = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
+    postprocesor = dict(
+        key='FFmpegExtractAudio',
+        preferredcodec='mp3',
+        preferredquality='192'
+    )
+    opcje_ytdlp = dict(
+        format='bestaudio/best',
+        outtmpl=f"{sciezka_wyjsciowa}.%(ext)s",
+        default_search='ytsearch1',
+        noplaylist=True,
+        quiet=True,
+        socket_timeout=20,
+        postprocessors=list((postprocesor,))
+    )
     try:
-        with yt_dlp.YoutubeDL(opcje) as ydl:
-            ydl.download([zapytanie])
-        gotowy = f"{sciezka}.mp3"
-        if os.path.exists(gotowy):
-            return gotowy
+        with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
+            ydl.download(list((zapytanie,)))
+        gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
+        if os.path.exists(gotowy_plik):
+            return gotowy_plik
     except Exception as e:
-        print(f"Blad yt-dlp: {e}")
+        print(f"Blad pobierania yt-dlp: {e}")
     return None
 
 
 def zapisz_brakujacy_utwor_sftp(sftp, tresc_sms, numer_nadawcy, szukany_utwor):
     teraz = datetime.now(STREFA_EUROPA).strftime("%Y-%m-%d %H:%M:%S")
-    wpis = f"[{teraz}] Od: {numer_nadawcy} | Szukano: {szukany_utwor} | SMS: {tresc_sms}\n"
-    lokalny = os.path.join(FOLDER_ROBOCZY, "temp_brakujace.txt")
+    wpis = f"[{teraz}] Od: {numer_nadawcy} | Szukano: {szukany_utwor} | Pelny SMS: {tresc_sms}\n"
+    lokalny_txt = os.path.join(FOLDER_ROBOCZY, "temp_brakujace.txt")
     try:
         try:
-            sftp.get(PLIK_BRAKUJACE_ZDALNY, lokalny)
+            sftp.get(PLIK_BRAKUJACE_ZDALNY, lokalny_txt)
         except IOError:
             pass
-        with open(lokalny, "a", encoding="utf-8") as f:
+        with open(lokalny_txt, "a", encoding="utf-8") as f:
             f.write(wpis)
-        sftp.put(lokalny, PLIK_BRAKUJACE_ZDALNY)
+        sftp.put(lokalny_txt, PLIK_BRAKUJACE_ZDALNY)
     except Exception as e:
-        print(f"Blad zapisu brakujacych: {e}")
+        print(f"Blad zapisu brakujacych na SFTP: {e}")
     finally:
-        if os.path.exists(lokalny):
-            os.remove(lokalny)
+        if os.path.exists(lokalny_txt):
+            os.remove(lokalny_txt)
 
 
 def wczytaj_kolejke_sftp(sftp):
-    lokalny = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
+    lokalny_json = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
     try:
-        sftp.get(PLIK_KOLEJKA_ZDALNY, lokalny)
-        with open(lokalny, "r", encoding="utf-8") as f:
+        sftp.get(PLIK_KOLEJKA_ZDALNY, lokalny_json)
+        with open(lokalny_json, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return []
+        return list()
     finally:
-        if os.path.exists(lokalny):
-            os.remove(lokalny)
+        if os.path.exists(lokalny_json):
+            os.remove(lokalny_json)
 
 
 def zapisz_kolejke_sftp(sftp, lista_kolejki):
-    lokalny = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
+    lokalny_json = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
     try:
-        with open(lokalny, "w", encoding="utf-8") as f:
+        with open(lokalny_json, "w", encoding="utf-8") as f:
             json.dump(lista_kolejki, f, ensure_ascii=False, indent=2)
-        sftp.put(lokalny, PLIK_KOLEJKA_ZDALNY)
+        sftp.put(lokalny_json, PLIK_KOLEJKA_ZDALNY)
     except Exception as e:
         print(f"Blad zapisu kolejki: {e}")
     finally:
-        if os.path.exists(lokalny):
-            os.remove(lokalny)
+        if os.path.exists(lokalny_json):
+            os.remove(lokalny_json)
 
 
 def pobierz_wiadomosci_rss():
+    url_rss = "https://rmf24.pl"
     try:
-        feed = feedparser.parse("https://rmf24.pl")
+        feed = feedparser.parse(url_rss)
         if feed.entries:
-            naglowki = [w.title.strip() for w in feed.entries[:3] if w.title.strip()]
+            naglowki = list()
+            for wpis in feed.entries[:3]:
+                if wpis.title.strip():
+                    naglowki.append(wpis.title.strip())
             if naglowki:
                 tekst = "Oto najważniejsze informacje z kraju i ze świata. "
                 for i, h in enumerate(naglowki, 1):
@@ -197,34 +209,38 @@ def pobierz_wiadomosci_rss():
 
 
 def inteligentna_korekta(tekst):
-    slownik = {
+    t = tekst.lower()
+    slownik_poprawek = {
         "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
         "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
         "dzien": "dzień", "urodziny": "urodziny", "urodzin": "urodzin",
         "dziekuje": "dziękuję", "dzieki": "dzięki", "sie": "się", "ze": "że",
         "dzis": "dziś", "tez": "też", "wogole": "w ogóle", "narazie": "na razie"
     }
-    return " ".join([slownik.get(s.strip(".,!?"), s) for s in tekst.lower().split()])
+    poprawione = list()
+    for s in t.split():
+        poprawione.append(slownik_poprawek.get(s.strip(".,!?"), s))
+    return " ".join(poprawione)
 
 
-def czy_wiadomosc_bezpieczna(tekst):
+def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
     if not tekst or len(tekst.strip()) < 3:
         return False
     return any(l in "aąeęioóuy" for l in tekst.lower())
 
 
-def zbuduj_zapowiedz_godzinowa(godzina_24h):
-    wysw_godzina = 24 if godzina_24h == 0 else godzina_24h
-    wiadomosci = pobierz_wiadomosci_rss() if 6 <= godzina_24h <= 16 else ""
-    ramowka = (
+def zbuduj_zapowiedz_godzinowa(aktualna_godzina_24h):
+    wyswietlana_godzina = 24 if aktualna_godzina_24h == 0 else aktualna_godzina_24h
+    sekcja_wiadomosci = pobierz_wiadomosci_rss() if 6 <= aktualna_godzina_24h <= 16 else ""
+    reklama_ramowki = (
         "Przypominamy o naszych audycjach prowadzonych przez Zofię i Marka! "
         "Aby wziąć udział, rozpocznij swój SMS od słów Koncert Życzeń lub Piosenka na Życzenie. "
         "Piosenkę na Życzenie gramy od poniedziałku do piątku od siedemnastej do osiemnastej, "
         "a wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
         "Wyślij SMS na nasz całkowicie darmowy numer telefonu: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć."
     )
-    tekst = f"Radio Strefa Zero. Wybiła godzina {wysw_godzina}. {wiadomosci} {ramowka} Wracamy do najlepszej muzyki!"
-    return [(GLOS_KOBIETA, tekst)]
+    pelny_tekst = f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. {sekcja_wiadomosci} {reklama_ramowki} Wracamy do najlepszej muzyki!"
+    return list(((GLOS_KOBIETA, pelny_tekst),))
 
 
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
@@ -233,42 +249,25 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
     try:
         transport, sftp = polacz_sftp()
         teraz = datetime.now(STREFA_EUROPA)
-        znacznik = teraz.strftime("%Y%m%d_%H%M%S")
+        znacznik_czasu = teraz.strftime("%Y%m%d_%H%M%S")
         t_low = tresc_sms.lower()
 
         if "koncert" in t_low:
             typ_audycji = "koncert"
-            czysta = re.sub(r'(?i)^koncert\s*życzeń[:\-\s]*|^koncert\s*zyczen[:\-\s]*', '', tresc_sms).strip()
+            czysta_tresc = re.sub(r'(?i)^koncert\s*życzeń[:\-\s]*|^koncert\s*zyczen[:\-\s]*', '', tresc_sms).strip()
         elif "piosenka" in t_low or "muzyka" in t_low:
             typ_audycji = "piosenka"
-            czysta = re.sub(r'(?i)^piosenka\s*na\s*życzenie[:\-\s]*|^piosenka\s*na\s*zyczenie[:\-\s]*', '', tresc_sms).strip()
+            czysta_tresc = re.sub(r'(?i)^piosenka\s*na\s*życzenie[:\-\s]*|^piosenka\s*na\s*zyczenie[:\-\s]*', '', tresc_sms).strip()
         else:
             typ_audycji = "piosenka"
-            czysta = tresc_sms.strip()
+            czysta_tresc = tresc_sms.strip()
 
-        imie = "Słuchacza"
-        match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', czysta)
+        imie_nadawcy = "Słuchacza"
+        match_podpis = re.search(r'[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})', czysta_tresc)
         if match_podpis:
-            imie = match_podpis.group(1).capitalize()
+            imie_nadawcy = match_podpis.group(1).capitalize()
 
-        zapytanie = re.sub(r'[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}', '', czysta).strip()
-        czy_piosenka = (typ_audycji == "piosenka") or any(w in t_low for w in ("piosenk", "zagraj", "utwór"))
+        zapytanie_muzyczne = re.sub(r'[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}', '', czysta_tresc).strip()
+        czy_zamowiono_piosenke = (typ_audycji == "piosenka") or ("piosenk" in t_low) or ("zagraj" in t_low) or ("utwór" in t_low)
 
-        sciezka_piosenki = None
-        if czy_piosenka and len(zapytanie) > 2:
-            sciezka_piosenki = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie)
-            if not sciezka_piosenki:
-                bezp_nazwa = re.sub(r'[^a-zA-Z0-9_\-]', '_', zapytanie)[:40] + f"_{znacznik}"
-                lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie, bezp_nazwa)
-                if lokalne_mp3 and os.path.exists(lokalne_mp3):
-                    zdalna = f"{DIR_POBRANE}/{bezp_nazwa}.mp3"
-                    sftp.put(lokalne_mp3, zdalna)
-                    sciezka_piosenki = zdalna
-                    os.remove(lokalne_mp3)
-                else:
-                    zapisz_brakujacy_utwor_sftp(sftp, tresc_sms, numer_nadawcy, zapytanie)
-                    return
-
-        poprawiona = inteligentna_korekta(czysta)
-        if typ_audycji == "koncert":
-            kwestie = 
+        sciezka_piosenki_na_dysku = None
