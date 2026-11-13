@@ -1,14 +1,25 @@
-import os, re, json, time, asyncio, threading
+import os
+import re
+import json
+import time
+import asyncio
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, request
-import paramiko, edge_tts, feedparser, yt_dlp, static_ffmpeg
+import paramiko
+import edge_tts
+import feedparser
+import yt_dlp
+import static_ffmpeg
 
 static_ffmpeg.add_paths()
+
 app = Flask(__name__)
 
 FOLDER_ROBOCZY = "roboczy_radio"
-os.makedirs(FOLDER_ROBOCZY, exist_ok=True)
+if not os.path.exists(FOLDER_ROBOCZY):
+    os.makedirs(FOLDER_ROBOCZY)
 
 SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
 SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
@@ -28,10 +39,13 @@ STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 KONCERT_ZYCZEN_DNI = (4, 5)
 KONCERT_ZYCZEN_START = 18
 KONCERT_ZYCZEN_KONIEC = 20
+
 PIOSENKA_NA_ZYCZENIE_DNI = (0, 1, 2, 3, 4)
 PIOSENKA_NA_ZYCZENIE_START = 17
 PIOSENKA_NA_ZYCZENIE_KONIEC = 18
+
 ODSTEP_EMISJI_SEKUNDY = 420
+
 
 def polacz_sftp():
     transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
@@ -44,9 +58,11 @@ def polacz_sftp():
             sftp.mkdir(folder)
     return transport, sftp
 
+
 async def _generuj_segment_async(tekst, glos, plik_wyjsciowy):
     communicate = edge_tts.Communicate(tekst, glos)
     await communicate.save(plik_wyjsciowy)
+
 
 def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
@@ -77,6 +93,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_f):
                 os.remove(temp_f)
 
+
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     slowa = [s.lower() for s in re.findall(r'\w+', zapytanie) if len(s) > 2]
     if not slowa:
@@ -85,11 +102,13 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     for folder in foldery:
         try:
             for plik in sftp.listdir(folder):
-                if plik.lower().endswith(".mp3") and all(sl in plik.lower() for sl in slowa):
-                    return f"{folder}/{plik}" if folder != "." else plik
+                if plik.lower().endswith(".mp3"):
+                    if all(sl in plik.lower() for sl in slowa):
+                        return f"{folder}/{plik}" if folder != "." else plik
         except Exception:
             continue
     return None
+
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa):
     sciezka = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa)
@@ -100,16 +119,22 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa):
         'noplaylist': True,
         'quiet': True,
         'socket_timeout': 20,
-        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
     }
     try:
         with yt_dlp.YoutubeDL(opcje) as ydl:
             ydl.download([zapytanie])
         gotowy = f"{sciezka}.mp3"
-        return gotowy if os.path.exists(gotowy) else None
+        if os.path.exists(gotowy):
+            return gotowy
     except Exception as e:
         print(f"Blad yt-dlp: {e}")
-        return None
+    return None
+
 
 def zapisz_brakujacy_utwor_sftp(sftp, tresc_sms, numer_nadawcy, szukany_utwor):
     teraz = datetime.now(STREFA_EUROPA).strftime("%Y-%m-%d %H:%M:%S")
@@ -129,6 +154,7 @@ def zapisz_brakujacy_utwor_sftp(sftp, tresc_sms, numer_nadawcy, szukany_utwor):
         if os.path.exists(lokalny):
             os.remove(lokalny)
 
+
 def wczytaj_kolejke_sftp(sftp):
     lokalny = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
     try:
@@ -141,6 +167,7 @@ def wczytaj_kolejke_sftp(sftp):
         if os.path.exists(lokalny):
             os.remove(lokalny)
 
+
 def zapisz_kolejke_sftp(sftp, lista_kolejki):
     lokalny = os.path.join(FOLDER_ROBOCZY, "temp_kolejka.json")
     try:
@@ -152,6 +179,7 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
     finally:
         if os.path.exists(lokalny):
             os.remove(lokalny)
+
 
 def pobierz_wiadomosci_rss():
     try:
@@ -167,6 +195,7 @@ def pobierz_wiadomosci_rss():
         print(f"Blad RSS: {e}")
     return "Na naszej antenie gramy dla Was najlepsze przeboje bez przerwy! "
 
+
 def inteligentna_korekta(tekst):
     slownik = {
         "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
@@ -177,10 +206,12 @@ def inteligentna_korekta(tekst):
     }
     return " ".join([slownik.get(s.strip(".,!?"), s) for s in tekst.lower().split()])
 
+
 def czy_wiadomosc_bezpieczna(tekst):
     if not tekst or len(tekst.strip()) < 3:
         return False
     return any(l in "aąeęioóuy" for l in tekst.lower())
+
 
 def zbuduj_zapowiedz_godzinowa(godzina_24h):
     wysw_godzina = 24 if godzina_24h == 0 else godzina_24h
@@ -195,8 +226,10 @@ def zbuduj_zapowiedz_godzinowa(godzina_24h):
     tekst = f"Radio Strefa Zero. Wybiła godzina {wysw_godzina}. {wiadomosci} {ramowka} Wracamy do najlepszej muzyki!"
     return [(GLOS_KOBIETA, tekst)]
 
+
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
-    transport, sftp = None, None
+    transport = None
+    sftp = None
     try:
         transport, sftp = polacz_sftp()
         teraz = datetime.now(STREFA_EUROPA)
@@ -239,4 +272,3 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         poprawiona = inteligentna_korekta(czysta)
         if typ_audycji == "koncert":
             kwestie = [
-                (GLOS_KOBIETA, f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń! Napisał do nas {imie}."),
