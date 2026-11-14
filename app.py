@@ -269,11 +269,14 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     )
     gatunek_muzyki = daj_gatunek_na_godzine(docelowa_godzina_24h)
 
+    # Poprawiony zapis numeru telefonu – słownie, żeby lektorka przeczytała go poprawnie po kawałku
+    nr_tel_slownie = "plus jeden, 812, 412, 29, 75"
+
     if faza == "srodek":
         pelny_tekst = (
             f"Radio Strefa Zero. Jesteśmy w połowie pasma! "
             f"Teraz grają dla Was {gatunek_muzyki}. "
-            f"Piszcie darmowe SMS-y z pozdrowieniami na numer plus jeden, 812, 412, 2975. Zostajcie z nami!"
+            f"Piszcie darmowe SMS-y z pozdrowieniami na numer: {nr_tel_slownie}. Zostajcie z nami!"
         )
         return list(((GLOS_MEZCZYZNA, pelny_tekst),))
 
@@ -290,7 +293,7 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
         pelny_tekst = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
             f"Przez najbliższą godzinę królują {gatunek_muzyki}! "
-            f"Przypominamy o darmowym numerze SMS: plus jeden, 812, 412, 2975. "
+            f"Przypominamy o darmowym numerze SMS: {nr_tel_slownie}. "
             f"Zamawiajcie utwory i pozdrawiajcie bliskich!"
         )
         return list(((GLOS_KOBIETA, pelny_tekst),))
