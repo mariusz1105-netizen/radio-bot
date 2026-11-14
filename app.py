@@ -135,23 +135,43 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     postprocesor = dict(
         key="FFmpegExtractAudio", preferredcodec="mp3", preferredquality="192"
     )
+    
+    warianty_zapytan = [
+        f"ytsearch1:{zapytanie} audio",
+        f"ytsearch1:{zapytanie} piosenka",
+        f"ytsearch1:{zapytanie}",
+    ]
+    
     opcje_ytdlp = dict(
         format="bestaudio/best",
         outtmpl=f"{sciezka_wyjsciowa}.%(ext)s",
-        default_search="ytsearch1",
         noplaylist=True,
         quiet=True,
-        socket_timeout=20,
+        socket_timeout=25,
         postprocessors=list((postprocesor,)),
+        http_headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
     )
-    try:
-        with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
-            ydl.download(list((zapytanie,)))
-        gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
-        if os.path.exists(gotowy_plik):
-            return gotowy_plik
-    except Exception as e:
-        print(f"Blad pobierania yt-dlp: {e}")
+
+    for query in warianty_zapytan:
+        try:
+            print(f"Próbuję pobrać za pomocą zapytania: {query}")
+            lokalne_opcje = opcje_ytdlp.copy()
+            lokalny_dlp_opcje = lokalne_opcje.copy()
+            lokalny_dlp_opcje['default_search'] = 'ytsearch1'
+            
+            with yt_dlp.YoutubeDL(lokalny_dlp_opcje) as ydl:
+                ydl.download([query])
+                
+            gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
+            if os.path.exists(gotowy_plik):
+                print(f"Sukces! Pobrano: {gotowy_plik}")
+                return gotowy_plik
+        except Exception as e:
+            print(f"Próba pobrania dla '{query}' nie powiodła się: {e}")
+            continue
+            
     return None
 
 
@@ -260,7 +280,6 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h):
     sekcja_wiadomosci = (
         pobierz_wiadomosci_rss() if 6 <= docelowa_godzina_24h <= 20 else ""
     )
-    # Zwięzła, konkretna zapowiedź ramówki podana raz
     krótka_ramowka = (
         "Przypominamy: Piosenka na życzenie od poniedziałku do piątku od siedemnastej do osiemnastej. "
         "Wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
@@ -327,11 +346,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 lokalne_mp3 = pobierz_piosenke_z_sieci(
                     zapytanie_muzyczne, bezpieczna_nazwa
                 )
-                if lokalne_mp3 and os.path.exists(lokalny_mp3):
+                if lokalne_mp3 and os.path.exists(lokalne_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalny_mp3, zdalna_piosenka)
+                    sftp.put(lokalne_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
-                    os.remove(lokalny_mp3)
+                    os.remove(lokalne_mp3)
                 else:
                     zapisz_brakujacy_utwor_sftp(
                         sftp, tresc_sms, numer_nadawcy, zapytanie_muzyczne
@@ -405,12 +424,10 @@ def petla_zegara_i_emisji():
         try:
             teraz = datetime.now(STREFA_EUROPA)
             
-            # --- ZAPOWIEDŹ GODZINOWA GENEROWANA 10 MINUT PRZED CZASEM ---
-            # Sprawdzamy czas za 10 minut
+            # Generowanie zapowiedzi 10 minut przed pełną godziną (minuta == 50)
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             
-            # Jeśli zbliża się pełna godzina (minuta == 50) i jeszcze nie generowaliśmy tej godziny
             if czas_przyszly.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
@@ -418,7 +435,6 @@ def petla_zegara_i_emisji():
                         if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
                             sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
                     
-                    # Tworzymy plik z wyprzedzeniem oznaczony docelową godziną
                     nazwa_pliku = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka = generuj_audio_mp3(
                         zbuduj_zapowiedz_godzinowa(docelowa_godzina), nazwa_pliku
@@ -431,7 +447,6 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
 
-            # --- EMISJA AUDYCJI ---
             dzien = teraz.weekday()
             godzina = teraz.hour
             obecny_ts = time.time()
@@ -513,7 +528,6 @@ def strona_glowna():
 def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        # Ręczne wygenerowanie dla aktualnej godziny
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = generuj_audio_mp3(
@@ -532,7 +546,7 @@ def endpoint_generuj_godzine():
             os.remove(sciezka_pliku)
             return {
                 "status": "success",
-                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina} z wyprzedzeniem.",
+                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
             }, 200
         
         return {
