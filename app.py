@@ -544,7 +544,6 @@ def endpoint_generuj_godzine():
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
-    # Odczytanie treści i numeru nadawcy przesłanego przez Twilio
     tresc = request.form.get("Body", "")
     nadawca = request.form.get("From", "")
     
@@ -556,7 +555,6 @@ def sms_reply():
         )
         watek_sms.start()
     
-    # Zwrócenie poprawnej odpowiedzi w formacie TwiML do Twilio (status 200)
     return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
 
 
