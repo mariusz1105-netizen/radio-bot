@@ -269,8 +269,8 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     )
     gatunek_muzyki = daj_gatunek_na_godzine(docelowa_godzina_24h)
 
-    # Poprawiony zapis numeru telefonu – słownie, żeby lektorka przeczytała go poprawnie po kawałku
-    nr_tel_slownie = "plus jeden, 812, 412, 29, 75"
+    # Poprawiony zapis liczbowy końcówki numeru, żeby lektorka przeczytała "siedemdziesiąt pięć"
+    nr_tel_slownie = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
     if faza == "srodek":
         pelny_tekst = (
