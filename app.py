@@ -501,7 +501,9 @@ def petla_zegara_i_emisji():
 watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
 watek_glowny.start()
 
-
+@app.route('/')
+def strona_glowna():
+    return "Radio Strefa Zero Bot działa poprawnie!", 200
 @app.route("/sms", methods=["POST"])
 def odbierz_sms():
     tresc_sms = request.form.get("Body", "")
