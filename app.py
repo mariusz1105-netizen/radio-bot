@@ -545,7 +545,8 @@ def endpoint_generuj_godzine():
             }, 200
         return {
             "status": "error",
-            @app.route("/sms", methods=["POST"])
+           
+@app.route("/sms", methods=["POST"])
 def sms_reply():
     # Odczytanie treści i numeru nadawcy przesłanego przez Twilio
     tresc = request.form.get("Body", "")
@@ -555,7 +556,3 @@ def sms_reply():
     
     # Zwrócenie poprawnej odpowiedzi do Twilio (status 200)
     return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
-            "message": "Nie udalo sie stworzec pliku MP3",
-        }, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
