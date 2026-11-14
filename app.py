@@ -12,7 +12,7 @@ import edge_tts
 import feedparser
 import yt_dlp
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -560,5 +560,5 @@ def sms_reply():
     return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
