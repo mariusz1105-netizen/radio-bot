@@ -86,7 +86,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
         print(f"Blad TTS: {e}")
         return None
     finally:
-    for temp_f in pliki_tymczasowe:
+        for temp_f in pliki_tymczasowe:
             if os.path.exists(temp_f):
                 os.remove(temp_f)
      def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
