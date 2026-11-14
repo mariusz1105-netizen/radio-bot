@@ -543,8 +543,6 @@ def endpoint_generuj_godzine():
                 "status": "success",
                 "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
             }, 200
-        return {
-            "status": "error",
            
 @app.route("/sms", methods=["POST"])
 def sms_reply():
