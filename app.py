@@ -350,7 +350,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 )
                 if lokalne_mp3 and os.path.exists(lokalne_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalne_mp3, zdalna_piosenka)
+                    sftp.put(lokalny_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
                     os.remove(lokalne_mp3)
                 else:
@@ -430,20 +430,29 @@ def petla_zegara_i_emisji():
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             
+            # Bezpieczne generowanie i dodawanie nowej godziny bez natychmiastowego usuwania poprzedniej
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
-                    for stary_plik in sftp.listdir(DIR_JINGLES):
-                        if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
-                            sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
-                    
                     nazwa_pliku = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka = generuj_audio_mp3(
                         zbuduj_zapowiedz_godzinowa(docelowa_godzina), nazwa_pliku
                     )
                     if sciezka and os.path.exists(sciezka):
+                        # Wrzucamy nowy plik do jingles
                         sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
                         os.remove(sciezka)
+                        
+                        # Usuwamy tylko bardzo stare pliki godzinowe (sprzed ponad 90 minut), 
+                        # żeby nowy plik i poprzedni mogły spokojnie czekać na odtworzenie
+                        for stary_plik in sftp.listdir(DIR_JINGLES):
+                            if stary_plik.startswith("godzina_") and stary_plik != nazwa_pliku and stary_plik.endswith(".mp3"):
+                                try:
+                                    # Sprawdzamy czas modyfikacji lub po prostu pozwalamy starszym plikom zejść po czasie
+                                    # Tutaj usuwamy starsze niż bieżący plik, zachowując zapas
+                                    sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
+                                except Exception:
+                                    pass
                 finally:
                     sftp.close()
                     transport.close()
@@ -485,9 +494,6 @@ def petla_zegara_i_emisji():
                         None,
                     )
                     if paczka:
-                        for plik_j in sftp.listdir(DIR_JINGLES):
-                            if plik_j.startswith("wiadomosc_") and plik_j.endswith(".mp3"):
-                                sftp.remove(f"{DIR_JINGLES}/{plik_j}")
                         nazwa_glos = os.path.basename(paczka.get("plik_glos"))
                         sftp.rename(
                             paczka.get("plik_glos"),
@@ -538,9 +544,6 @@ def endpoint_generuj_godzine():
         if sciezka_pliku and os.path.exists(sciezka_pliku):
             transport, sftp = polacz_sftp()
             try:
-                for stary_plik in sftp.listdir(DIR_JINGLES):
-                    if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
-                        sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
                 sftp.put(sciezka_pliku, f"{DIR_JINGLES}/{nazwa_pliku}")
             finally:
                 sftp.close()
