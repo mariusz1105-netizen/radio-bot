@@ -28,7 +28,6 @@ DIR_MAGAZYN = "magazyn_zyczen"
 DIR_POBRANE = "pobrane_od_sluchaczy"
 
 PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
-PLIK_BRAKUJACE_ZDALNY = f"{DIR_MAGAZYN}/brakujace_piosenki.txt"
 
 GLOS_KOBIETA = "pl-PL-ZofiaNeural"
 GLOS_MEZCZYZNA = "pl-PL-MarekNeural"
@@ -170,25 +169,6 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             continue
             
     return None
-
-
-def zapisz_brakujacy_utwor_sftp(sftp, tresc_sms, numer_nadawcy, szukany_utwor):
-    teraz = datetime.now(STREFA_EUROPA).strftime("%Y-%m-%d %H:%M:%S")
-    wpis = f"[{teraz}] Od: {numer_nadawcy} | Szukano: {szukany_utwor} | Pelny SMS: {tresc_sms}\n"
-    lokalny_txt = os.path.join(FOLDER_ROBOCZY, "temp_brakujace.txt")
-    try:
-        try:
-            sftp.get(PLIK_BRAKUJACE_ZDALNY, lokalny_txt)
-        except IOError:
-            pass
-        with open(lokalny_txt, "a", encoding="utf-8") as f:
-            f.write(wpis)
-        sftp.put(lokalny_txt, PLIK_BRAKUJACE_ZDALNY)
-    except Exception as e:
-        print(f"Blad zapisu brakujacych na SFTP: {e}")
-    finally:
-        if os.path.exists(lokalny_txt):
-            os.remove(lokalny_txt)
 
 
 def wczytaj_kolejke_sftp(sftp):
@@ -369,9 +349,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         sciezka_piosenki_na_dysku = None
         if czy_zamowiono_piosenke and len(zapytanie_muzyczne) > 2:
+            # 1. Próbujemy znaleźć na dysku
             sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(
                 sftp, zapytanie_muzyczne
             )
+            # 2. Jeśli nie ma na dysku, automatycznie pobieramy z sieci (BEZ TWORZENIA PLIKU TXT!)
             if not sciezka_piosenki_na_dysku:
                 bezpieczna_nazwa = (
                     re.sub(r"[^a-zA-Z0-9_\-]", "_", zapytanie_muzyczne)[:40]
@@ -380,16 +362,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 lokalne_mp3 = pobierz_piosenke_z_sieci(
                     zapytanie_muzyczne, bezpieczna_nazwa
                 )
-                if lokalne_mp3 and os.path.exists(lokalne_mp3):
+                if lokalne_mp3 and os.path.exists(lokalny_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalne_mp3, zdalna_piosenka)
+                    sftp.put(lokalny_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
                     os.remove(lokalny_mp3)
-                else:
-                    zapisz_brakujacy_utwor_sftp(
-                        sftp, tresc_sms, numer_nadawcy, zapytanie_muzyczne
-                    )
-                    return
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
@@ -466,7 +443,7 @@ def petla_zegara_i_emisji():
             minuta_teraz = teraz.minute
             godzina_teraz = teraz.hour
 
-            # 1. Początek godziny (minuta 50 poprzedniej lub 00 bieżącej -> generujemy zapowiedź startową)
+            # 1. Początek godziny (zapowiedź startowa)
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
@@ -506,7 +483,7 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
-            # 3. Koniec godziny (minuta 50 - zaproszenie do kolejnej zabawy/Dance)
+            # 3. Koniec godziny (minuta 50)
             faza_klucz_koniec = f"{godzina_teraz}_50"
             if minuta_teraz == 50 and ostatnia_generowana_faza != faza_klucz_koniec:
                 transport, sftp = polacz_sftp()
@@ -579,65 +556,4 @@ def petla_zegara_i_emisji():
                                 os.remove(lokalny_temp_utwor)
                         kolejka.remove(paczka)
                         zapisz_kolejke_sftp(sftp, kolejka)
-                        ostatnia_e_timestamp = obecny_ts
-                finally:
-                    sftp.close()
-                    transport.close()
-        except Exception as e:
-            print(f"Blad petli glownej: {e}")
-        time.sleep(15)
-
-
-watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-watek_glowny.start()
-
-
-@app.route('/')
-def strona_glowna():
-    return "Radio Strefa Zero Bot działa poprawnie!", 200
-
-
-@app.route("/generuj-godzine", methods=["GET", "POST"])
-def endpoint_generuj_godzine():
-    try:
-        teraz = datetime.now(STREFA_EUROPA)
-        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
-        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
-        sciezka_pliku = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
-        )
-        if sciezka_pliku and os.path.exists(sciezka_pliku):
-            transport, sftp = polacz_sftp()
-            try:
-                sftp.put(sciezka_pliku, f"{DIR_JINGLES}/{nazwa_pliku}")
-            finally:
-                sftp.close()
-                transport.close()
-            os.remove(sciezka_pliku)
-            return {
-                "status": "success",
-                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
-            }, 200
-        
-        return {
-            "status": "error",
-            "message": "Nie udalo sie stworzyc pliku MP3"
-        }, 500
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
-
-
-@app.route("/sms", methods=["POST"])
-def sms_reply():
-    tresc = request.form.get("Body", "")
-    nadawca = request.form.get("From", "")
-    
-    print(f"Odebrano SMS od {nadawca}: {tresc}")
-    
-    if czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc):
-        watek_sms = threading.Thread(
-            target=przetworz_sms_w_tle, args=(tresc, nadawca), daemon=True
-        )
-        watek_sms.start()
-    
-    return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
+                        o
