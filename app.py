@@ -270,7 +270,20 @@ def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
     return any(l in "aąeęioóuy" for l in tekst.lower())
 
 
-def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h):
+def daj_gatunek_na_godzine(godzina):
+    if 18 <= godzina < 20:
+        return "Wielki Koncert Życzeń"
+    elif 17 <= godzina < 18:
+        return "Piosenka na Życzenie"
+    elif 6 <= godzina < 14:
+        return "najlepsze Disco Polo"
+    elif 14 <= godzina < 22:
+        return "Italo Disco i energetyczne Eurodance"
+    else:
+        return "klubowy miks muzyczny"
+
+
+def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     wyswietlana_godzina = (
         24 if docelowa_godzina_24h == 0 else docelowa_godzina_24h
     )
@@ -278,17 +291,36 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h):
     if not sekcja_wiadomosci:
         sekcja_wiadomosci = "Gramy dla Was najlepszą muzykę bez przerwy."
 
-    komunikat_sms = (
-        "Przypominamy o darmowym numerze SMS plus 1 812 412 2975. "
-        "Piosenka na życzenie od poniedziałku do piątku od siedemnastej do osiemnastej. "
-        "Wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
-        "Zamawiajcie utwory i pozdrawiajcie bliskich!"
-    )
-    pelny_tekst = (
-        f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
-        f"{sekcja_wiadomosci} {komunikat_sms} Zostajcie z nami!"
-    )
-    return list(((GLOS_KOBIETA, pelny_tekst),))
+    gatunek_muzyki = daj_gatunek_na_godzine(docelowa_godzina_24h)
+
+    if faza == "srodek":
+        pelny_tekst = (
+            f"Radio Strefa Zero. Jesteśmy w połowie naszej godziny! "
+            f"Przez cały czas królują dla Was {gatunek_muzyki}. "
+            f"Wysyłajcie darmowe SMS-y z pozdrowieniami na numer plus 1 812 412 2975. Zostajcie z nami!"
+        )
+        return list(((GLOS_MEZCZYZNA, pelny_tekst),))
+
+    elif faza == "koniec":
+        pelny_tekst = (
+            f"To już końcówka tego pasma w Radiu Strefa Zero! "
+            f"Dziękujemy za wspólne chwile i mnóstwo wiadomości. "
+            f"Ale nie odchodźcie daleko – już za chwilę kolejna porcja wspaniałej muzyki Dance i następna fala świetnej zabawy! "
+            f"Bądźcie z nami, bo rozkręcamy się na dobre!"
+        )
+        return list(((GLOS_KOBIETA, pelny_tekst),))
+
+    else:
+        komunikat_sms = (
+            f"Przez najbliższą godzinę na naszej antenie królują {gatunek_muzyki}! "
+            "Przypominamy o darmowym numerze SMS plus 1 812 412 2975. "
+            "Zamawiajcie utwory i pozdrawiajcie bliskich!"
+        )
+        pelny_tekst = (
+            f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
+            f"{sekcja_wiadomosci} {komunikat_sms} Zostajcie z nami!"
+        )
+        return list(((GLOS_KOBIETA, pelny_tekst),))
 
 
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
@@ -350,9 +382,9 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 )
                 if lokalne_mp3 and os.path.exists(lokalne_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalny_mp3, zdalna_piosenka)
+                    sftp.put(lokalne_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
-                    os.remove(lokalne_mp3)
+                    os.remove(lokalny_mp3)
                 else:
                     zapisz_brakujacy_utwor_sftp(
                         sftp, tresc_sms, numer_nadawcy, zapytanie_muzyczne
@@ -423,33 +455,32 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
     ostatnia_e_timestamp = 0
+    ostatnia_generowana_faza = ""
+
     while True:
         try:
             teraz = datetime.now(STREFA_EUROPA)
             
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
-            
-            # Bezpieczne generowanie i dodawanie nowej godziny bez natychmiastowego usuwania poprzedniej
+            minuta_teraz = teraz.minute
+            godzina_teraz = teraz.hour
+
+            # 1. Początek godziny (minuta 50 poprzedniej lub 00 bieżącej -> generujemy zapowiedź startową)
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
                     nazwa_pliku = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka = generuj_audio_mp3(
-                        zbuduj_zapowiedz_godzinowa(docelowa_godzina), nazwa_pliku
+                        zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku
                     )
                     if sciezka and os.path.exists(sciezka):
-                        # Wrzucamy nowy plik do jingles
                         sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
                         os.remove(sciezka)
                         
-                        # Usuwamy tylko bardzo stare pliki godzinowe (sprzed ponad 90 minut), 
-                        # żeby nowy plik i poprzedni mogły spokojnie czekać na odtworzenie
                         for stary_plik in sftp.listdir(DIR_JINGLES):
                             if stary_plik.startswith("godzina_") and stary_plik != nazwa_pliku and stary_plik.endswith(".mp3"):
                                 try:
-                                    # Sprawdzamy czas modyfikacji lub po prostu pozwalamy starszym plikom zejść po czasie
-                                    # Tutaj usuwamy starsze niż bieżący plik, zachowując zapas
                                     sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
                                 except Exception:
                                     pass
@@ -457,6 +488,40 @@ def petla_zegara_i_emisji():
                     sftp.close()
                     transport.close()
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
+
+            # 2. Środek godziny (minuta 30)
+            faza_klucz_srodek = f"{godzina_teraz}_30"
+            if minuta_teraz == 30 and ostatnia_generowana_faza != faza_klucz_srodek:
+                transport, sftp = polacz_sftp()
+                try:
+                    nazwa_pliku_srodek = f"srodek_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+                    sciezka_srodek = generuj_audio_mp3(
+                        zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="srodek"), nazwa_pliku_srodek
+                    )
+                    if sciezka_srodek and os.path.exists(sciezka_srodek):
+                        sftp.put(sciezka_srodek, f"{DIR_JINGLES}/{nazwa_pliku_srodek}")
+                        os.remove(sciezka_srodek)
+                finally:
+                    sftp.close()
+                    transport.close()
+                ostatnia_generowana_faza = faza_klucz_srodek
+
+            # 3. Koniec godziny (minuta 50 - zaproszenie do kolejnej zabawy/Dance)
+            faza_klucz_koniec = f"{godzina_teraz}_50"
+            if minuta_teraz == 50 and ostatnia_generowana_faza != faza_klucz_koniec:
+                transport, sftp = polacz_sftp()
+                try:
+                    nazwa_pliku_koniec = f"koniec_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+                    sciezka_koniec = generuj_audio_mp3(
+                        zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="koniec"), nazwa_pliku_koniec
+                    )
+                    if sciezka_koniec and os.path.exists(sciezka_koncowy := sciezka_koniec):
+                        sftp.put(sciezka_koncowy, f"{DIR_JINGLES}/{nazwa_pliku_koniec}")
+                        os.remove(sciezka_koncowy)
+                finally:
+                    sftp.close()
+                    transport.close()
+                ostatnia_generowana_faza = faza_klucz_koniec
 
             dzien = teraz.weekday()
             godzina = teraz.hour
@@ -539,7 +604,7 @@ def endpoint_generuj_godzine():
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour), nazwa_pliku
+            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
         )
         if sciezka_pliku and os.path.exists(sciezka_pliku):
             transport, sftp = polacz_sftp()
