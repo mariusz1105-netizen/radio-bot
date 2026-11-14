@@ -4,7 +4,7 @@ import json
 import time
 import asyncio
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request
 import paramiko
@@ -12,7 +12,7 @@ import edge_tts
 import feedparser
 import yt_dlp
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -206,17 +206,17 @@ def pobierz_wiadomosci_rss():
         feed = feedparser.parse(url_rss)
         if feed.entries:
             naglowki = list()
-            for wpis in feed.entries[:3]:
+            for wpis in feed.entries[:2]:
                 if wpis.title.strip():
                     naglowki.append(wpis.title.strip())
             if naglowki:
-                tekst = "Oto najważniejsze informacje z kraju i ze świata. "
+                tekst = "Skrót wiadomości: "
                 for i, h in enumerate(naglowki, 1):
-                    tekst += f"Wiadomość numer {i}: {h}. "
+                    tekst += f"{h}. "
                 return tekst
     except Exception as e:
         print(f"Blad RSS: {e}")
-    return "Na naszej antenie gramy dla Was najlepsze przeboje bez przerwy! "
+    return ""
 
 
 def inteligentna_korekta(tekst):
@@ -253,21 +253,20 @@ def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
     return any(l in "aąeęioóuy" for l in tekst.lower())
 
 
-def zbuduj_zapowiedz_godzinowa(aktualna_godzina_24h):
+def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h):
     wyswietlana_godzina = (
-        24 if aktualna_godzina_24h == 0 else aktualna_godzina_24h
+        24 if docelowa_godzina_24h == 0 else docelowa_godzina_24h
     )
     sekcja_wiadomosci = (
-        pobierz_wiadomosci_rss() if 6 <= aktualna_godzina_24h <= 16 else ""
+        pobierz_wiadomosci_rss() if 6 <= docelowa_godzina_24h <= 20 else ""
     )
-    reklama_ramowki = (
-        "Przypominamy o naszych audycjach prowadzonych przez Zofię i Marka! "
-        "Aby wziąć udział, rozpocznij swój SMS od słów Koncert Życzeń lub Piosenka na Życzenie. "
-        "Piosenkę na Życzenie gramy od poniedziałku do piątku od siedemnastej do osiemnastej, "
-        "a wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
-        "Wyślij SMS na nasz całkowicie darmowy numer telefonu: plus jeden, osiemset dwanaście, czterysta dwanaście, dwadzieścia dziewięć siedemdziesiąt pięć."
+    # Zwięzła, konkretna zapowiedź ramówki podana raz
+    krótka_ramowka = (
+        "Przypominamy: Piosenka na życzenie od poniedziałku do piątku od siedemnastej do osiemnastej. "
+        "Wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
+        "Zamawiajcie utwory darmowym SMS-em!"
     )
-    pelny_tekst = f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. {sekcja_wiadomosci} {reklama_ramowki} Wracamy do najlepszej muzyki!"
+    pelny_tekst = f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. {sekcja_wiadomosci} {krótka_ramowka} Gramy dalej!"
     return list(((GLOS_KOBIETA, pelny_tekst),))
 
 
@@ -328,11 +327,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 lokalne_mp3 = pobierz_piosenke_z_sieci(
                     zapytanie_muzyczne, bezpieczna_nazwa
                 )
-                if lokalne_mp3 and os.path.exists(lokalne_mp3):
+                if lokalne_mp3 and os.path.exists(lokalny_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalne_mp3, zdalna_piosenka)
+                    sftp.put(lokalny_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
-                    os.remove(lokalne_mp3)
+                    os.remove(lokalny_mp3)
                 else:
                     zapisz_brakujacy_utwor_sftp(
                         sftp, tresc_sms, numer_nadawcy, zapytanie_muzyczne
@@ -345,30 +344,30 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             kwestie_audio = (
                 (
                     GLOS_KOBIETA,
-                    f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń! Napisał do nas {imie_nadawcy}.",
+                    f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!",
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    f"Świetnie Zofia, już przejmuję mikrofon i czytam! Oto treść wiadomości: {poprawiona_tresc}.",
+                    f"Już czytam treść: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    "Dziękujemy za udział w Koncercie Życzeń! Pozdrawiamy gorąco i gramy dalej w Radiu Strefa Zero!",
+                    "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!",
                 ),
             )
         else:
             kwestie_audio = (
                 (
                     GLOS_MEZCZYZNA,
-                    f"Zofia, spójrz na naszą linię SMS. W paśmie Piosenka na Życzenie odezwał się {imie_nadawcy}.",
+                    f"Zofia, mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    f"Już przekazuję dalej na antenę! Nasz słuchacz pisze tak: {poprawiona_tresc}.",
+                    f"Oto treść wiadomości: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    "Świetny wybór! Zostajemy w klimacie Piosenki na Życzenie w Radiu Strefa Zero.",
+                    "Świetny wybór, lecimy z muzyką!",
                 ),
             )
 
@@ -405,24 +404,24 @@ def petla_zegara_i_emisji():
     while True:
         try:
             teraz = datetime.now(STREFA_EUROPA)
-            dzien = teraz.weekday()
-            godzina = teraz.hour
-            obecny_ts = time.time()
-
-            if (
-                teraz.minute == 0
-                and godzina != ostatnia_zapowiedziana_godzina
-            ):
+            
+            # --- ZAPOWIEDŹ GODZINOWA GENEROWANA 10 MINUT PRZED CZASEM ---
+            # Sprawdzamy czas za 10 minut
+            czas_przyszly = teraz + timedelta(minutes=10)
+            docelowa_godzina = czas_przyszly.hour
+            
+            # Jeśli zbliża się pełna godzina (minuta == 50) i jeszcze nie generowaliśmy tej godziny
+            if czas_przyszly.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
                     for stary_plik in sftp.listdir(DIR_JINGLES):
-                        if stary_plik.startswith("godzina_") and stary_plik.endswith(
-                            ".mp3"
-                        ):
+                        if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
                             sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
-                    nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+                    
+                    # Tworzymy plik z wyprzedzeniem oznaczony docelową godziną
+                    nazwa_pliku = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka = generuj_audio_mp3(
-                        zbuduj_zapowiedz_godzinowa(godzina), nazwa_pliku
+                        zbuduj_zapowiedz_godzinowa(docelowa_godzina), nazwa_pliku
                     )
                     if sciezka and os.path.exists(sciezka):
                         sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
@@ -430,7 +429,12 @@ def petla_zegara_i_emisji():
                 finally:
                     sftp.close()
                     transport.close()
-                ostatnia_zapowiedziana_godzina = godzina
+                ostatnia_zapowiedziana_godzina = docelowa_godzina
+
+            # --- EMISJA AUDYCJI ---
+            dzien = teraz.weekday()
+            godzina = teraz.hour
+            obecny_ts = time.time()
 
             trwa_koncert = (
                 dzien in KONCERT_ZYCZEN_DNI
@@ -465,9 +469,7 @@ def petla_zegara_i_emisji():
                     )
                     if paczka:
                         for plik_j in sftp.listdir(DIR_JINGLES):
-                            if plik_j.startswith(
-                                "wiadomosc_"
-                            ) and plik_j.endswith(".mp3"):
+                            if plik_j.startswith("wiadomosc_") and plik_j.endswith(".mp3"):
                                 sftp.remove(f"{DIR_JINGLES}/{plik_j}")
                         nazwa_glos = os.path.basename(paczka.get("plik_glos"))
                         sftp.rename(
@@ -511,6 +513,7 @@ def strona_glowna():
 def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
+        # Ręczne wygenerowanie dla aktualnej godziny
         wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka_pliku = generuj_audio_mp3(
@@ -520,9 +523,7 @@ def endpoint_generuj_godzine():
             transport, sftp = polacz_sftp()
             try:
                 for stary_plik in sftp.listdir(DIR_JINGLES):
-                    if stary_plik.startswith("godzina_") and stary_plik.endswith(
-                        ".mp3"
-                    ):
+                    if stary_plik.startswith("godzina_") and stary_plik.endswith(".mp3"):
                         sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
                 sftp.put(sciezka_pliku, f"{DIR_JINGLES}/{nazwa_pliku}")
             finally:
@@ -531,7 +532,7 @@ def endpoint_generuj_godzine():
             os.remove(sciezka_pliku)
             return {
                 "status": "success",
-                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
+                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina} z wyprzedzeniem.",
             }, 200
         
         return {
@@ -556,7 +557,3 @@ def sms_reply():
         watek_sms.start()
     
     return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
