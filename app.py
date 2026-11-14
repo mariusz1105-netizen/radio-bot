@@ -12,7 +12,7 @@ import edge_tts
 import feedparser
 import yt_dlp
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -274,15 +274,20 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h):
     wyswietlana_godzina = (
         24 if docelowa_godzina_24h == 0 else docelowa_godzina_24h
     )
-    sekcja_wiadomosci = (
-        pobierz_wiadomosci_rss() if 6 <= docelowa_godzina_24h <= 20 else ""
-    )
-    krótka_ramowka = (
-        "Przypominamy: Piosenka na życzenie od poniedziałku do piątku od siedemnastej do osiemnastej. "
+    sekcja_wiadomosci = pobierz_wiadomosci_rss()
+    if not sekcja_wiadomosci:
+        sekcja_wiadomosci = "Gramy dla Was najlepszą muzykę bez przerwy."
+
+    komunikat_sms = (
+        "Przypominamy o darmowym numerze SMS plus 1 812 412 2975. "
+        "Piosenka na życzenie od poniedziałku do piątku od siedemnastej do osiemnastej. "
         "Wielki Koncert Życzeń w piątki i soboty od osiemnastej do dwudziestej. "
-        "Zamawiajcie utwory darmowym SMS-em!"
+        "Zamawiajcie utwory i pozdrawiajcie bliskich!"
     )
-    pelny_tekst = f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. {sekcja_wiadomosci} {krótka_ramowka} Gramy dalej!"
+    pelny_tekst = (
+        f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
+        f"{sekcja_wiadomosci} {komunikat_sms} Zostajcie z nami!"
+    )
     return list(((GLOS_KOBIETA, pelny_tekst),))
 
 
@@ -356,34 +361,35 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
+        # Dialog botów (Zofia i Marek)
         if typ_audycji == "koncert":
             kwestie_audio = (
                 (
                     GLOS_KOBIETA,
-                    f"Marek, mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!",
+                    f"Marek, zobacz co nam przysłali! Mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}.",
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    f"Już czytam treść: {poprawiona_tresc}.",
+                    f"O, ciekaw jestem! Już czytam treść dla naszych słuchaczy: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!",
+                    "Piękne słowa. Pozdrawiamy serdecznie i gramy dalej w Radiu Strefa Zero!",
                 ),
             )
         else:
             kwestie_audio = (
                 (
                     GLOS_MEZCZYZNA,
-                    f"Zofia, mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}.",
+                    f"Zofia, wpłynęło nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    f"Oto treść wiadomości: {poprawiona_tresc}.",
+                    f"Świetnie! Słuchamy co tam autor ma do przekazania: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    "Świetny wybór, lecimy z muzyką!",
+                    "Dokładnie tak, lecimy z tym kawałkiem!",
                 ),
             )
 
@@ -424,7 +430,7 @@ def petla_zegara_i_emisji():
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             
-            if czas_przyszly.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
+            if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
                     for stary_plik in sftp.listdir(DIR_JINGLES):
