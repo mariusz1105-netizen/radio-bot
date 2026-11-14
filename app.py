@@ -89,7 +89,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
         for temp_f in pliki_tymczasowe:
             if os.path.exists(temp_f):
                 os.remove(temp_f)
-                         def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
+     def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     slowa_kluczowe = list()
     for s in re.findall(r'\w+', zapytanie):
         if len(s) > 2:
