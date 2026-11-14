@@ -349,11 +349,9 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         sciezka_piosenki_na_dysku = None
         if czy_zamowiono_piosenke and len(zapytanie_muzyczne) > 2:
-            # 1. Próbujemy znaleźć na dysku
             sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(
                 sftp, zapytanie_muzyczne
             )
-            # 2. Jeśli nie ma na dysku, automatycznie pobieramy z sieci (BEZ TWORZENIA PLIKU TXT!)
             if not sciezka_piosenki_na_dysku:
                 bezpieczna_nazwa = (
                     re.sub(r"[^a-zA-Z0-9_\-]", "_", zapytanie_muzyczne)[:40]
@@ -370,7 +368,6 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
-        # Dialog botów (Zofia i Marek)
         if typ_audycji == "koncert":
             kwestie_audio = (
                 (
@@ -443,7 +440,6 @@ def petla_zegara_i_emisji():
             minuta_teraz = teraz.minute
             godzina_teraz = teraz.hour
 
-            # 1. Początek godziny (zapowiedź startowa)
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
@@ -466,7 +462,6 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
 
-            # 2. Środek godziny (minuta 30)
             faza_klucz_srodek = f"{godzina_teraz}_30"
             if minuta_teraz == 30 and ostatnia_generowana_faza != faza_klucz_srodek:
                 transport, sftp = polacz_sftp()
@@ -483,7 +478,6 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
-            # 3. Koniec godziny (minuta 50)
             faza_klucz_koniec = f"{godzina_teraz}_50"
             if minuta_teraz == 50 and ostatnia_generowana_faza != faza_klucz_koniec:
                 transport, sftp = polacz_sftp()
@@ -492,9 +486,9 @@ def petla_zegara_i_emisji():
                     sciezka_koniec = generuj_audio_mp3(
                         zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="koniec"), nazwa_pliku_koniec
                     )
-                    if sciezka_koniec and os.path.exists(sciezka_koncowy := sciezka_koniec):
-                        sftp.put(sciezka_koncowy, f"{DIR_JINGLES}/{nazwa_pliku_koniec}")
-                        os.remove(sciezka_koncowy)
+                    if sciezka_koniec and os.path.exists(sciezka_koniec):
+                        sftp.put(sciezka_koniec, f"{DIR_JINGLES}/{nazwa_pliku_koniec}")
+                        os.remove(sciezka_koniec)
                 finally:
                     sftp.close()
                     transport.close()
@@ -556,4 +550,70 @@ def petla_zegara_i_emisji():
                                 os.remove(lokalny_temp_utwor)
                         kolejka.remove(paczka)
                         zapisz_kolejke_sftp(sftp, kolejka)
-                        o
+                        ostatnia_e_timestamp = obecny_ts
+                finally:
+                    sftp.close()
+                    transport.close()
+        except Exception as e:
+            print(f"Blad petli glownej: {e}")
+        time.sleep(15)
+
+
+watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+watek_glowny.start()
+
+
+@app.route('/')
+def strona_glowna():
+    return "Radio Strefa Zero Bot działa poprawnie!", 200
+
+
+@app.route("/generuj-godzine", methods=["GET", "POST"])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
+        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        sciezka_pliku = generuj_audio_mp3(
+            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
+        )
+        if sciezka_pliku and os.path.exists(sciezka_pliku):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka_pliku, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka_pliku)
+            return {
+                "status": "success",
+                "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
+            }, 200
+        
+        return {
+            "status": "error",
+            "message": "Nie udalo sie stworzyc pliku MP3"
+        }, 500
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+
+@app.route("/sms", methods=["POST"])
+def sms_reply():
+    tresc = request.form.get("Body", "")
+    nadawca = request.form.get("From", "")
+    
+    print(f"Odebrano SMS od {nadawca}: {tresc}")
+    
+    if czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc):
+        watek_sms = threading.Thread(
+            target=przetworz_sms_w_tle, args=(tresc, nadawca), daemon=True
+        )
+        watek_sms.start()
+    
+    return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
