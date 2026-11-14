@@ -12,7 +12,7 @@ import edge_tts
 import feedparser
 import yt_dlp
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -132,9 +132,6 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     sciezka_wyjsciowa = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
-    postprocesor = dict(
-        key="FFmpegExtractAudio", preferredcodec="mp3", preferredquality="192"
-    )
     
     warianty_zapytan = [
         f"ytsearch1:{zapytanie} audio",
@@ -142,26 +139,26 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
         f"ytsearch1:{zapytanie}",
     ]
     
-    opcje_ytdlp = dict(
-        format="bestaudio/best",
-        outtmpl=f"{sciezka_wyjsciowa}.%(ext)s",
-        noplaylist=True,
-        quiet=True,
-        socket_timeout=25,
-        postprocessors=list((postprocesor,)),
-        http_headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    opcje_ytdlp = {
+        "format": "bestaudio/best",
+        "outtmpl": f"{sciezka_wyjsciowa}.%(ext)s",
+        "noplaylist": True,
+        "quiet": True,
+        "socket_timeout": 25,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }],
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
-    )
+    }
 
     for query in warianty_zapytan:
         try:
             print(f"Próbuję pobrać za pomocą zapytania: {query}")
-            lokalne_opcje = opcje_ytdlp.copy()
-            lokalny_dlp_opcje = lokalne_opcje.copy()
-            lokalny_dlp_opcje['default_search'] = 'ytsearch1'
-            
-            with yt_dlp.YoutubeDL(lokalny_dlp_opcje) as ydl:
+            with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
                 ydl.download([query])
                 
             gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
@@ -424,7 +421,6 @@ def petla_zegara_i_emisji():
         try:
             teraz = datetime.now(STREFA_EUROPA)
             
-            # Generowanie zapowiedzi 10 minut przed pełną godziną (minuta == 50)
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             
