@@ -267,38 +267,31 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     wyswietlana_godzina = (
         24 if docelowa_godzina_24h == 0 else docelowa_godzina_24h
     )
-    sekcja_wiadomosci = pobierz_wiadomosci_rss()
-    if not sekcja_wiadomosci:
-        sekcja_wiadomosci = "Gramy dla Was najlepszą muzykę bez przerwy."
-
     gatunek_muzyki = daj_gatunek_na_godzine(docelowa_godzina_24h)
 
     if faza == "srodek":
         pelny_tekst = (
-            f"Radio Strefa Zero. Jesteśmy w połowie naszej godziny! "
-            f"Przez cały czas królują dla Was {gatunek_muzyki}. "
-            f"Wysyłajcie darmowe SMS-y z pozdrowieniami na numer plus 1 812 412 2975. Zostajcie z nami!"
+            f"Radio Strefa Zero. Jesteśmy w połowie pasma! "
+            f"Teraz grają dla Was {gatunek_muzyki}. "
+            f"Piszcie darmowe SMS-y z pozdrowieniami na numer plus jeden, 812, 412, 2975. Zostajcie z nami!"
         )
         return list(((GLOS_MEZCZYZNA, pelny_tekst),))
 
     elif faza == "koniec":
         pelny_tekst = (
-            f"To już końcówka tego pasma w Radiu Strefa Zero! "
-            f"Dziękujemy za wspólne chwile i mnóstwo wiadomości. "
-            f"Ale nie odchodźcie daleko – już za chwilę kolejna porcja wspaniałej muzyki Dance i następna fala świetnej zabawy! "
-            f"Bądźcie z nami, bo rozkręcamy się na dobre!"
+            f"To już końcówka tego bloku w Radiu Strefa Zero! "
+            f"Dziękujemy za wspólne chwile. "
+            f"Już za chwilę kolejna porcja muzyki Dance i następna fala zabawy! "
+            f"Bądźcie z nami!"
         )
         return list(((GLOS_KOBIETA, pelny_tekst),))
 
     else:
-        komunikat_sms = (
-            f"Przez najbliższą godzinę na naszej antenie królują {gatunek_muzyki}! "
-            "Przypominamy o darmowym numerze SMS plus 1 812 412 2975. "
-            "Zamawiajcie utwory i pozdrawiajcie bliskich!"
-        )
         pelny_tekst = (
             f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. "
-            f"{sekcja_wiadomosci} {komunikat_sms} Zostajcie z nami!"
+            f"Przez najbliższą godzinę królują {gatunek_muzyki}! "
+            f"Przypominamy o darmowym numerze SMS: plus jeden, 812, 412, 2975. "
+            f"Zamawiajcie utwory i pozdrawiajcie bliskich!"
         )
         return list(((GLOS_KOBIETA, pelny_tekst),))
 
@@ -376,26 +369,26 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    f"O, ciekaw jestem! Już czytam treść dla naszych słuchaczy: {poprawiona_tresc}.",
+                    f"Już czytam treść: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    "Piękne słowa. Pozdrawiamy serdecznie i gramy dalej w Radiu Strefa Zero!",
+                    "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!",
                 ),
             )
         else:
             kwestie_audio = (
                 (
                     GLOS_MEZCZYZNA,
-                    f"Zofia, wpłynęło nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}.",
+                    f"Zofia, mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}.",
                 ),
                 (
                     GLOS_KOBIETA,
-                    f"Świetnie! Słuchamy co tam autor ma do przekazania: {poprawiona_tresc}.",
+                    f"Oto treść wiadomości: {poprawiona_tresc}.",
                 ),
                 (
                     GLOS_MEZCZYZNA,
-                    "Dokładnie tak, lecimy z tym kawałkiem!",
+                    "Świetny wybór, lecimy z muzyką!",
                 ),
             )
 
