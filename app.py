@@ -12,7 +12,7 @@ import edge_tts
 import feedparser
 import yt_dlp
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -501,20 +501,10 @@ def petla_zegara_i_emisji():
 watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
 watek_glowny.start()
 
+
 @app.route('/')
 def strona_glowna():
     return "Radio Strefa Zero Bot działa poprawnie!", 200
-@app.route("/sms", methods=["POST"])
-def odbierz_sms():
-    tresc_sms = request.form.get("Body", "")
-    numer_nadawcy = request.form.get("From", "Nieznany")
-    if not czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc_sms):
-        return "OK", 200
-    watek_sms = threading.Thread(
-        target=przetworz_sms_w_tle, args=(tresc_sms, numer_nadawcy), daemon=True
-    )
-    watek_sms.start()
-    return "OK", 200
 
 
 @app.route("/generuj-godzine", methods=["GET", "POST"])
@@ -543,7 +533,15 @@ def endpoint_generuj_godzine():
                 "status": "success",
                 "message": f"Wygenerowano zapowiedz godzinowa dla godziny {wyswietlana_godzina}.",
             }, 200
-           
+        
+        return {
+            "status": "error",
+            "message": "Nie udalo sie stworzyc pliku MP3"
+        }, 500
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+
 @app.route("/sms", methods=["POST"])
 def sms_reply():
     # Odczytanie treści i numeru nadawcy przesłanego przez Twilio
@@ -552,5 +550,15 @@ def sms_reply():
     
     print(f"Odebrano SMS od {nadawca}: {tresc}")
     
-    # Zwrócenie poprawnej odpowiedzi do Twilio (status 200)
+    if czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tresc):
+        watek_sms = threading.Thread(
+            target=przetworz_sms_w_tle, args=(tresc, nadawca), daemon=True
+        )
+        watek_sms.start()
+    
+    # Zwrócenie poprawnej odpowiedzi w formacie TwiML do Twilio (status 200)
     return "<Response></Response>", 200, {'Content-Type': 'application/xml'}
+
+
+if _name_ == "_main_":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
