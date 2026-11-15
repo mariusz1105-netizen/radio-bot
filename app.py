@@ -255,16 +255,16 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     if faza == "srodek":
         warianty_srodek = [
             (
-                "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gramy dla Was.",
-                f"Przypominam o darmowych wiadomościach z pozdrowieniami na numer: {nr_tel}. Bądźcie z nami."
+                ("glos", "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gramy dla Was."),
+                ("glos", f"Przypominam o darmowych wiadomościach z pozdrowieniami na numer: {nr_tel}. Bądźcie z nami.")
             ),
             (
-                "Twoje ulubione Radio Strefa Zero gra bez przerwy!",
-                f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań z nami."
+                ("glos", "Twoje ulubione Radio Strefa Zero gra bez przerwy!"),
+                ("glos", f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań z nami.")
             ),
             (
-                "Mijają kolejne chwile z Radiem Strefa Zero.",
-                f"Pamiętajcie o darmowych pozdrowieniach na numer: {nr_tel}. Miłego słuchania!"
+                ("glos", "Mijają kolejne chwile z Radiem Strefa Zero."),
+                ("glos", f"Pamiętajcie o darmowych pozdrowieniach na numer: {nr_tel}. Miłego słuchania!")
             )
         ]
         return random.choice(warianty_srodek)
@@ -272,12 +272,12 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     elif faza == "koniec":
         warianty_koniec = [
             (
-                "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście z nami.",
-                "Już niedługo kolejna porcja muzyki i następna fala dobrej zabawy. Do usłyszenia."
+                ("glos", "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście z nami."),
+                ("glos", "Już niedługo kolejna porcja muzyki i następna fala dobrej zabawy. Do usłyszenia.")
             ),
             (
-                "Powoli kończymy tę godzinę w Radiu Strefa Zero.",
-                "Zostajcie na naszej fali, bo za chwilę wracamy z kolejnymi muzycznymi hitami."
+                ("glos", "Powoli kończymy tę godzinę w Radiu Strefa Zero."),
+                ("glos", "Zostajcie na naszej fali, bo za chwilę wracamy z kolejnymi muzycznymi hitami.")
             )
         ]
         return random.choice(warianty_koniec)
@@ -285,16 +285,16 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     else:
         warianty_poczatek = [
             (
-                f"Radio Strefa Zero. Przez najbliższą godzinę zapraszam na spotkanie przy {gatunek}.",
-                f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}."
+                ("glos", f"Radio Strefa Zero. Przez najbliższą godzinę zapraszam na spotkanie przy {gatunek}."),
+                ("glos", f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}.")
             ),
             (
-                f"Witajcie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}.",
-                f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomość na numer: {nr_tel}."
+                ("glos", f"Witajcie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}."),
+                ("glos", f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomość na numer: {nr_tel}.")
             ),
             (
-                f"Czas na dobrą muzykę w Radiu Strefa Zero! Przed nami godzina pełna dźwięków pod znakiem: {gatunek}.",
-                f"Pozdrawiajcie swoich bliskich przez darmowy numer: {nr_tel}. Miłej zabawy!"
+                ("glos", f"Czas na dobrą muzykę w Radiu Strefa Zero! Przed nami godzina pełna dźwięków pod znakiem: {gatunek}."),
+                ("glos", f"Pozdrawiajcie swoich bliskich przez darmowy numer: {nr_tel}. Miłej zabawy!")
             )
         ]
         return random.choice(warianty_poczatek)
