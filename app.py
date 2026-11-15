@@ -1,4 +1,4 @@
-import os
+[11:58, 15.11.2026] Mariusz: import os
 import re
 import json
 import time
@@ -13,6 +13,38 @@ import yt_dlp
 from pydub import AudioSegment
 
 app = Flask(__name__)
+
+FOLDER_ROBOCZY = "roboczy_radio"
+if not os.path.exists(FOLDER_ROBOCZY):
+    os.makedirs(FOLDER_ROBOCZY)
+
+SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
+SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
+SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
+SFTP_PASS = os.environ.get("SFTP_PASS", "")
+
+DIR_JINGLES = "jingles"
+DIR_MAGAZYN = "magazyn_zyczen"
+DIR_POBRANE = "pobrane_od_sluchaczy"
+
+PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
+
+STREFA_EUROPA =…
+[11:59, 15.11.2026] Mariusz: import os
+import re
+import json
+import time
+import threading
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from flask import Flask, request
+import paramiko
+from gtts import gTTS
+import feedparser
+import yt_dlp
+from pydub import AudioSegment
+
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -67,6 +99,14 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             tts = gTTS(text=tekst, lang='pl', slow=False)
             tts.save(temp_path)
             if os.path.exists(temp_path):
+                # Przyspieszamy każdy fragment o 15% dla lepszej dynamiki
+                try:
+                    segment_audio = AudioSegment.from_file(temp_path)
+                    zmieniony_segment = segment_audio.speedup(playback_speed=1.15)
+                    zmieniony_segment.export(temp_path, format="mp3")
+                except Exception as e:
+                    print(f"Błąd przyspieszania audio: {e}")
+                
                 pliki_tymczasowe.append(temp_path)
 
         if pliki_tymczasowe:
@@ -74,7 +114,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             for temp_f in pliki_tymczasowe:
                 segment = AudioSegment.from_file(temp_f)
                 polaczony_segment += segment
-                polaczony_segment += AudioSegment.silent(duration=500)
+                polaczony_segment += AudioSegment.silent(duration=300)
             
             polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
