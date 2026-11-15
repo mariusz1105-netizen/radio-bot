@@ -69,7 +69,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_path):
                 try:
                     segment_audio = AudioSegment.from_file(temp_path)
-                    # Zwiększone tempo do 1.35, żeby nadać radiowy pazur i zlikwidować ospałość
+                    # Przyspieszenie 1.35x nadaje żywą, radiową dynamiki
                     zmieniony_segment = segment_audio.speedup(playback_speed=1.35)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
@@ -257,12 +257,12 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
 
     if faza == "srodek":
         kwestie = (
-            ("glos", f"Uwaga! Tu Radio Strefa Zero! Jesteśmy dokładnie w połowie naszego pasma! Teraz gramy specjalnie dla Was: {gatunek_muzyki}"),
-            ("glos", f"Przypominamy o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}! Zostajcie z nami i bawcie się świetnie!")
+            ("glos", f"Halo, tu Radio Strefa Zero! Jesteśmy dokładnie w połowie naszego pasma! Teraz gramy specjalnie dla Was: {gatunek_muzyki}"),
+            ("glos", f"Przypominam o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}! Zostajcie z nami i bawcie się świetnie!")
         )
     elif faza == "koniec":
         kwestie = (
-            ("glos", f"Ojej, to już niestety końcówka tego bloku w Radiu Strefa Zero! Dziękujemy, że jesteście z nami!"),
+            ("glos", f"To już niestety końcówka tego bloku w Radiu Strefa Zero! Dziękuję, że jesteście z nami!"),
             ("glos", f"Ale uwaga! Już za chwilę kolejna porcja najlepszej muzyki Dance i następna fala czystej zabawy! Bądźcie czujni!")
         )
     else:
@@ -316,9 +316,9 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if typ_audycji == "koncert":
             kwestie_audio = (
-                ("glos", f"Mamy niesamowitą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!"),
+                ("glos", f"Mam wspaniałą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!"),
                 ("glos", f"Oto treść: {poprawiona_tresc}!"),
-                ("glos", "Pozdrawiamy i lecimy dalej w Radiu Strefa Zero!"),
+                ("glos", "Pozdrawiam najmocniej i gramy dalej w Radiu Strefa Zero!"),
             )
         else:
             kwestie_audio = (
