@@ -99,24 +99,14 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
 
 
 def miksuj_z_tlem_muzycznym(sciezka_mowy, sciezka_tla=None, wspolczynnik_sciszenia_db=-14):
-    """
-    Nakłada wygenerowaną mowę na podkład muzyczny z efektem ściszenia tła (ducking).
-    Jeśli brak własnego tła, zwraca samą mowę.
-    """
     try:
         mowa = AudioSegment.from_file(sciezka_mowy)
-        
         if sciezka_tla and os.path.exists(sciezka_tla):
             tlo = AudioSegment.from_file(sciezka_tla)
-            # Przycinamy tło do długości mowy lub zapętlamy, jeśli za krótkie
             if len(tlo) < len(mowa):
                 tlo = tlo * (len(mowa) // len(tlo) + 1)
             tlo = tlo[:len(mowa)]
-            
-            # Ściszamy podkład muzyczny o określoną wartość w dB (np. -14dB daje ok. 20% głośności)
             tlo_przyciszone = tlo + wspolczynnik_sciszenia_db
-            
-            # Nakładamy mowę na przyciszone tło
             zmiksowane = tlo_przyciszone.overlay(mowa)
             zmiksowane.export(sciezka_mowy, format="mp3")
     except Exception as e:
@@ -183,18 +173,13 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
 
     for query in warianty_zapytan:
         try:
-            print(f"Próbuję pobrać za pomocą zapytania: {query}")
             with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
                 ydl.download([query])
-                
             gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
             if os.path.exists(gotowy_plik):
-                print(f"Sukces! Pobrano: {gotowy_plik}")
                 return gotowy_plik
-        except Exception as e:
-            print(f"Próba pobrania dla '{query}' nie powiodła się: {e}")
+        except Exception:
             continue
-            
     return None
 
 
@@ -224,25 +209,6 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
             os.remove(lokalny_json)
 
 
-def pobierz_wiadomosci_rss():
-    url_rss = "https://rmf24.pl"
-    try:
-        feed = feedparser.parse(url_rss)
-        if feed.entries:
-            naglowki = list()
-            for wpis in feed.entries[:2]:
-                if wpis.title.strip():
-                    naglowki.append(wpis.title.strip())
-            if naglowki:
-                tekst = "Skrót wiadomości: "
-                for i, h in enumerate(naglowki, 1):
-                    tekst += f"{h}. "
-                return tekst
-    except Exception as e:
-        print(f"Blad RSS: {e}")
-    return ""
-
-
 def inteligentna_korekta(tekst):
     t = tekst.lower()
     slownik_poprawek = {
@@ -269,12 +235,6 @@ def inteligentna_korekta(tekst):
     for s in t.split():
         poprawione.append(slownik_poprawek.get(s.strip(".,!?"), s))
     return " ".join(poprawione)
-
-
-def czy_wiadomosc_jest_zrozumiala_i_bezpieczna(tekst):
-    if not tekst or len(tekst.strip()) < 3:
-        return False
-    return any(l in "aąeęioóuy" for l in tekst.lower())
 
 
 def daj_gatunek_na_godzine(godzina):
@@ -308,7 +268,6 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
             (GLOS_MEZCZYZNA, f"Już za chwilę kolejna porcja muzyki Dance i następna fala zabawy! Bądźcie z nami!")
         )
     else:
-        # Faza początkowa: Kobieta podaje godzinę, a po chwili wchodzi mężczyzna z informacją/reklamą
         kwestie = (
             (GLOS_KOBIETA, f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. Przez najbliższą godzinę królują {gatunek_muzyki}!"),
             (GLOS_MEZCZYZNA, f"Zamawiajcie utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}.")
@@ -374,9 +333,6 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         lokalny_glos = generuj_audio_mp3(kwestie_audio, nazwa_glosu)
         
         if lokalny_glos and os.path.exists(lokalny_glos):
-            # Opcjonalne miksowanie z lekkim tłem (ducking)
-            # miksuj_z_tlem_muzycznym(lokalny_glos, "sciezka_do_tla.mp3") 
-            
             zdalny_glos = f"{DIR_MAGAZYN}/{nazwa_glosu}"
             sftp.put(lokalny_glos, zdalny_glos)
             os.remove(lokalny_glos)
@@ -390,8 +346,6 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         )
         kolejka.append(nowy_wpis)
         zapisz_kolejke_sftp(sftp, kolejka)
-        print(f"Dodano do kolejki: {typ_audycji}")
-
     except Exception as e:
         print(f"Blad przetwarzania SMS w tle: {e}")
     finally:
@@ -521,9 +475,23 @@ def strona_glowna():
 def endpoint_generuj_godzine():
     try:
         teraz = datetime.now(STREFA_EUROPA)
-        wyswietlana_godzina = 24 if teraz.hour == 0 else teraz.hour
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka = generuj_audio_mp3(
             zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
         )
-    if sciezka and os.path.exists(sciezka):
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
+        return "Błąd generowania pliku audio", 500
+    except Exception as e:
+        return f"Błąd endpointu: {e}", 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
