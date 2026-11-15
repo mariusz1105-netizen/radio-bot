@@ -1,4 +1,4 @@
-import os
+Nimport os
 import re
 import json
 import time
@@ -70,10 +70,17 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_path):
                 try:
                     segment_audio = AudioSegment.from_file(temp_path)
-                    zmieniony_segment = segment_audio.speedup(playback_speed=1.10)
+                    
+                    # Zmiana tonu (pitch) w górę, aby głos brzmiał jasno i kobieco
+                    nowa_czestotliwosc = int(segment_audio.frame_rate * 1.15)
+                    segment_kobiecego_glosu = segment_audio._spawn(segment_audio.raw_data, overrides={'frame_rate': nowa_czestotliwosc})
+                    segment_kobiecego_glosu = segment_kobiecego_glosu.set_frame_rate(44100)
+                    
+                    # Spokojne tempo radiowe
+                    zmieniony_segment = segment_kobiecego_glosu.speedup(playback_speed=1.05)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
-                    print(f"Błąd przyspieszania audio: {e}")
+                    print(f"Błąd modyfikacji audio na kobiecy głos: {e}")
                 
                 pliki_tymczasowe.append(temp_path)
 
@@ -82,7 +89,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             for temp_f in pliki_tymczasowe:
                 segment = AudioSegment.from_file(temp_f)
                 polaczony_segment += segment
-                polaczony_segment += AudioSegment.silent(duration=350)
+                polaczony_segment += AudioSegment.silent(duration=400)
             
             polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
@@ -255,12 +262,12 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     if faza == "srodek":
         warianty_srodek = [
             (
-                ("glos", "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gramy dla Was."),
+                ("glos", "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gram dla Was."),
                 ("glos", f"Przypominam o darmowych wiadomościach z pozdrowieniami na numer: {nr_tel}. Bądźcie z nami.")
             ),
             (
                 ("glos", "Twoje ulubione Radio Strefa Zero gra bez przerwy!"),
-                ("glos", f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań z nami.")
+                ("glos", f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań ze mną.")
             ),
             (
                 ("glos", "Mijają kolejne chwile z Radiem Strefa Zero."),
@@ -272,12 +279,12 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     elif faza == "koniec":
         warianty_koniec = [
             (
-                ("glos", "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście z nami."),
+                ("glos", "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście ze mną."),
                 ("glos", "Już niedługo kolejna porcja muzyki i następna fala dobrej zabawy. Do usłyszenia.")
             ),
             (
-                ("glos", "Powoli kończymy tę godzinę w Radiu Strefa Zero."),
-                ("glos", "Zostajcie na naszej fali, bo za chwilę wracamy z kolejnymi muzycznymi hitami.")
+                ("glos", "Powoli kończę tę godzinę w Radiu Strefa Zero."),
+                ("glos", "Zostajcie na naszej fali, bo za chwilę wracam z kolejnymi muzycznymi hitami.")
             )
         ]
         return random.choice(warianty_koniec)
@@ -289,7 +296,7 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
                 ("glos", f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}.")
             ),
             (
-                ("glos", f"Witajcie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}."),
+                ("glos", f"Witajcie w Radiu Strefa Zero! W tej godzinie gram specjalnie dla Was w rytmie: {gatunek}."),
                 ("glos", f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomość na numer: {nr_tel}.")
             ),
             (
@@ -345,7 +352,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             kwestie_audio = (
                 ("glos", f"Mam wspaniałą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
                 ("glos", f"Oto treść: {poprawiona_tresc}."),
-                ("glos", "Pozdrawiam najmocniej i gramy dalej w Radiu Strefa Zero!"),
+                ("glos", "Pozdrawiam najmocniej i gram dalej w Radiu Strefa Zero!"),
             )
         else:
             kwestie_audio = (
@@ -499,39 +506,4 @@ def petla_zegara_i_emisji():
                     transport.close()
         except Exception as e:
             print(f"Blad petli glownej: {e}")
-        time.sleep(15)
-
-
-watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-watek_glowny.start()
-
-
-@app.route('/')
-def strona_glowna():
-    return "Radio Strefa Zero Bot działa poprawnie!", 200
-
-
-@app.route("/generuj-godzine", methods=["GET", "POST"])
-def endpoint_generuj_godzine():
-    try:
-        teraz = datetime.now(STREFA_EUROPA)
-        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
-        sciezka = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
-        )
-        if sciezka and os.path.exists(sciezka):
-            transport, sftp = polacz_sftp()
-            try:
-                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
-            finally:
-                sftp.close()
-                transport.close()
-            os.remove(sciezka)
-            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio", 500
-    except Exception as e:
-        return f"Błąd endpointu: {e}", 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+        time.sle
