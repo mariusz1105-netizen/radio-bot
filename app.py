@@ -11,6 +11,7 @@ import paramiko
 import requests
 import feedparser
 import yt_dlp
+from gtts import gTTS
 from pydub import AudioSegment
 
 app = Flask(__name__)
@@ -23,10 +24,6 @@ SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
 SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
 SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
 SFTP_PASS = os.environ.get("SFTP_PASS", "")
-
-# Klucz i głos z ElevenLabs (pobierany bezpiecznie ze zmiennych środowiskowych Renderu)
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 
 DIR_JINGLES = "jingles"
 DIR_MAGAZYN = "magazyn_zyczen"
@@ -63,13 +60,6 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = list()
     try:
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
-        headers = {
-            "Accept": "audio/mpeg",
-            "Content-Type": "application/json",
-            "xi-api-key": ELEVENLABS_API_KEY
-        }
-
         for idx, (glos, tekst) in enumerate(lista_kwestii):
             if not tekst or not tekst.strip():
                 continue
@@ -77,24 +67,9 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}"
             )
             
-            payload = {
-                "text": tekst,
-                "model_id": "eleven_multilingual_v2",
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "style": 0.2,
-                    "use_speaker_boost": True
-                }
-            }
-
-            response = requests.post(url, json=payload, headers=headers)
-            if response.status_code == 200:
-                with open(temp_path, "wb") as f:
-                    f.write(response.content)
-                pliki_tymczasowe.append(temp_path)
-            else:
-                print(f"Błąd ElevenLabs API: {response.status_code} - {response.text}")
+            tts = gTTS(text=tekst, lang='pl', slow=False)
+            tts.save(temp_path)
+            pliki_tymczasowe.append(temp_path)
 
         if pliki_tymczasowe:
             polaczony_segment = AudioSegment.empty()
@@ -107,7 +82,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             return sciezka_koncowa
         return None
     except Exception as e:
-        print(f"Blad generatora ElevenLabs: {e}")
+        print(f"Blad generatora gTTS: {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -429,7 +404,7 @@ def test_generuj_godzine():
                 transport.close()
             os.remove(sciezka)
             return f"Sukces! Wygenerowano i wysłano zapowiedź: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio przez ElevenLabs", 500
+        return "Błąd generowania pliku audio przez gTTS", 500
     except Exception as e:
         return f"Błąd endpointu: {e}", 500
 
@@ -542,19 +517,3 @@ def petla_zegara_i_emisji():
                             if os.path.exists(lokalny_temp_utwor):
                                 os.remove(lokalny_temp_utwor)
                         kolejka.remove(paczka)
-                        zapisz_kolejke_sftp(sftp, kolejka)
-                        ostatnia_e_timestamp = obecny_ts
-                finally:
-                    sftp.close()
-                    transport.close()
-
-        except Exception as e:
-            print(f"Błąd w pętli głównej zegara: {e}")
-        
-        time.sleep(15)
-
-
-if __name__ == "__main__":
-    watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-    watek_tlo.start()
-    app.run(host="0.0.0.0", port=5000)
