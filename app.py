@@ -24,9 +24,8 @@ SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
 SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
 SFTP_PASS = os.environ.get("SFTP_PASS", "")
 
-# Klucz i głos z ElevenLabs (wybieramy profesjonalny głos kobiecy)
+# Klucz i głos z ElevenLabs (pobierany bezpiecznie ze zmiennych środowiskowych Renderu)
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-# Domyślny popularny kobiecy głos w ElevenLabs (np. Rachel / lub Twój ulubiony Voice ID)
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 
 DIR_JINGLES = "jingles"
@@ -400,6 +399,41 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             transport.close()
 
 
+@app.route("/sms", methods=["POST"])
+def webhook_sms():
+    tresc_sms = request.form.get("Body", "").strip()
+    numer_nadawcy = request.form.get("From", "").strip()
+    if tresc_sms:
+        watek = threading.Thread(target=przetworz_sms_w_tle, args=(tresc_sms, numer_nadawcy))
+        watek.start()
+    return "<Response></Response>", 200
+
+
+@app.route("/generuj-godzine", methods=["GET"])
+def test_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        docelowa_godzina = teraz.hour
+        nazwa_pliku = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+        
+        sciezka = generuj_audio_mp3(
+            zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku
+        )
+        
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return f"Sukces! Wygenerowano i wysłano zapowiedź: {nazwa_pliku}", 200
+        return "Błąd generowania pliku audio przez ElevenLabs", 500
+    except Exception as e:
+        return f"Błąd endpointu: {e}", 500
+
+
 def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
     ostatnia_e_timestamp = 0
@@ -495,63 +529,4 @@ def petla_zegara_i_emisji():
                 and PIOSENKA_NA_ZYCZENIE_START <= godzina < PIOSENKA_NA_ZYCZENIE_KONIEC
             )
 
-            aktywna_audycja = "koncert" if trwa_koncert else ("piosenka" if trwa_piosenka else None)
-
-            if aktywna_audycja and (obecny_ts - ostatnia_e_timestamp >= ODSTEP_EMISJI_SEKUNDY):
-                transport, sftp = polacz_sftp()
-                try:
-                    kolejka = wczytaj_kolejke_sftp(sftp)
-                    paczka = next((el for el in kolejka if el.get("audycja") == aktywna_audycja), None)
-                    if paczka:
-                        nazwa_glos = os.path.basename(paczka.get("plik_glos"))
-                        sftp.rename(paczka.get("plik_glos"), f"{DIR_JINGLES}/{nazwa_glos}")
-                        if paczka.get("plik_piosenka"):
-                            lokalny_temp_utwor = os.path.join(FOLDER_ROBOCZY, "emisja_utwor.mp3")
-                            sftp.get(paczka.get("plik_piosenka"), lokalny_temp_utwor)
-                            sftp.put(lokalny_temp_utwor, f"{DIR_JINGLES}/wiadomosc_utwor_{int(obecny_ts)}.mp3")
-                            if os.path.exists(lokalny_temp_utwor):
-                                os.remove(lokalny_temp_utwor)
-                        kolejka.remove(paczka)
-                        zapisz_kolejke_sftp(sftp, kolejka)
-                        ostatnia_e_timestamp = obecny_ts
-                finally:
-                    sftp.close()
-                    transport.close()
-        except Exception as e:
-            print(f"Blad petli glownej: {e}")
-        time.sleep(15)
-
-
-watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-watek_glowny.start()
-
-
-@app.route('/')
-def strona_glowna():
-    return "Radio Strefa Zero Bot działa poprawnie!", 200
-
-
-@app.route("/generuj-godzine", methods=["GET", "POST"])
-def endpoint_generuj_godzine():
-    try:
-        teraz = datetime.now(STREFA_EUROPA)
-        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
-        sciezka = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
-        )
-        if sciezka and os.path.exists(sciezka):
-            transport, sftp = polacz_sftp()
-            try:
-                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
-            finally:
-                sftp.close()
-                transport.close()
-            os.remove(sciezka)
-            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio", 500
-    except Exception as e:
-        return f"Błąd endpointu: {e}", 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+            aktywna_audycja = "koncert" if trwa_koncert
