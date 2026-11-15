@@ -76,7 +76,6 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                     segment_kobiecego_glosu = segment_audio._spawn(segment_audio.raw_data, overrides={'frame_rate': nowa_czestotliwosc})
                     segment_kobiecego_glosu = segment_kobiecego_glosu.set_frame_rate(44100)
                     
-                    # Spokojne tempo radiowe
                     zmieniony_segment = segment_kobiecego_glosu.speedup(playback_speed=1.05)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
@@ -506,4 +505,39 @@ def petla_zegara_i_emisji():
                     transport.close()
         except Exception as e:
             print(f"Blad petli glownej: {e}")
-        time.sle
+        time.sleep(15)
+
+
+watek_glowny = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+watek_glowny.start()
+
+
+@app.route('/')
+def strona_glowna():
+    return "Radio Strefa Zero Bot działa poprawnie!", 200
+
+
+@app.route("/generuj-godzine", methods=["GET", "POST"])
+def endpoint_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
+        sciezka = generuj_audio_mp3(
+            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
+        )
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
+        return "Błąd generowania pliku audio", 500
+    except Exception as e:
+        return f"Błąd endpointu: {e}", 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
