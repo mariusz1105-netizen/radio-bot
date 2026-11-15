@@ -520,13 +520,41 @@ def petla_zegara_i_emisji():
             dzien = teraz.weekday()
             godzina = teraz.hour
 
-            trwa_koncert = (
-                dzien in KONCERT_ZYCZEN_DNI
-                and KONCERT_ZYCZEN_START <= godzina < KONCERT_ZYCZEN_KONIEC
-            )
-            trwa_piosenka = (
-                dzien in PIOSENKA_NA_ZYCZENIE_DNI
-                and PIOSENKA_NA_ZYCZENIE_START <= godzina < PIOSENKA_NA_ZYCZENIE_KONIEC
-            )
+            if dzien in KONCERT_ZYCZEN_DNI and KONCERT_ZYCZEN_START <= godzina < KONCERT_ZYCZEN_KONIEC:
+                aktywna_audycja = "koncert"
+            elif dzien in PIOSENKA_NA_ZYCZENIE_DNI and PIOSENKA_NA_ZYCZENIE_START <= godzina < PIOSENKA_NA_ZYCZENIE_KONIEC:
+                aktywna_audycja = "piosenka"
+            else:
+                aktywna_audycja = None
 
-            aktywna_audycja = "koncert" if trwa_koncert
+            if aktywna_audycja and (obecny_ts - ostatnia_e_timestamp >= ODSTEP_EMISJI_SEKUNDY):
+                transport, sftp = polacz_sftp()
+                try:
+                    kolejka = wczytaj_kolejke_sftp(sftp)
+                    paczka = next((el for el in kolejka if el.get("audycja") == aktywna_audycja), None)
+                    if paczka:
+                        nazwa_glos = os.path.basename(paczka.get("plik_glos"))
+                        sftp.rename(paczka.get("plik_glos"), f"{DIR_JINGLES}/{nazwa_glos}")
+                        if paczka.get("plik_piosenka"):
+                            lokalny_temp_utwor = os.path.join(FOLDER_ROBOCZY, "emisja_utwor.mp3")
+                            sftp.get(paczka.get("plik_piosenka"), lokalny_temp_utwor)
+                            sftp.put(lokalny_temp_utwor, f"{DIR_JINGLES}/wiadomosc_utwor_{int(obecny_ts)}.mp3")
+                            if os.path.exists(lokalny_temp_utwor):
+                                os.remove(lokalny_temp_utwor)
+                        kolejka.remove(paczka)
+                        zapisz_kolejke_sftp(sftp, kolejka)
+                        ostatnia_e_timestamp = obecny_ts
+                finally:
+                    sftp.close()
+                    transport.close()
+
+        except Exception as e:
+            print(f"Błąd w pętli głównej zegara: {e}")
+        
+        time.sleep(15)
+
+
+if __name__ == "__main__":
+    watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+    watek_tlo.start()
+    app.run(host="0.0.0.0", port=5000)
