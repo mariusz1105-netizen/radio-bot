@@ -359,10 +359,35 @@ def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
     ostatnia_e_timestamp = 0
     ostatnia_generowana_faza = ""
+    ostatnie_czyszczenie_ts = 0
 
     while True:
         try:
             teraz = datetime.now(STREFA_EUROPA)
+            obecny_ts = time.time()
+
+            # --- AUTOMATYCZNE CZYSZCZENIE STARYCH PLIKÓW CO 30 MINUT (starsze niż 2 godziny) ---
+            if obecny_ts - ostatnie_czyszczenie_ts > 1800:
+                transport, sftp = polacz_sftp()
+                try:
+                    for plik in sftp.listdir(DIR_JINGLES):
+                        if plik.endswith(".mp3"):
+                            sciezka_pliku = f"{DIR_JINGLES}/{plik}"
+                            try:
+                                attr = sftp.stat(sciezka_pliku)
+                                czas_modyfikacji = attr.st_mtime
+                                if obecny_ts - czas_modyfikacji > 7200:
+                                    sftp.remove(sciezka_pliku)
+                                    print(f"Usunięto stary plik z jingles: {plik}")
+                            except Exception:
+                                pass
+                except Exception as e:
+                    print(f"Błąd podczas czyszczenia starych plików: {e}")
+                finally:
+                    sftp.close()
+                    transport.close()
+                    ostatnie_czyszczenie_ts = obecny_ts
+
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             minuta_teraz = teraz.minute
@@ -378,13 +403,6 @@ def petla_zegara_i_emisji():
                     if sciezka and os.path.exists(sciezka):
                         sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
                         os.remove(sciezka)
-                        
-                        for stary_plik in sftp.listdir(DIR_JINGLES):
-                            if stary_plik.startswith("godzina_") and stary_plik != nazwa_pliku and stary_plik.endswith(".mp3"):
-                                try:
-                                    sftp.remove(f"{DIR_JINGLES}/{stary_plik}")
-                                except Exception:
-                                    pass
                 finally:
                     sftp.close()
                     transport.close()
@@ -424,7 +442,6 @@ def petla_zegara_i_emisji():
 
             dzien = teraz.weekday()
             godzina = teraz.hour
-            obecny_ts = time.time()
 
             trwa_koncert = (
                 dzien in KONCERT_ZYCZEN_DNI
