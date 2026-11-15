@@ -1,4 +1,4 @@
-import os
+[12:04, 15.11.2026] Mariusz: import os
 import re
 import json
 import time
@@ -13,6 +13,38 @@ import yt_dlp
 from pydub import AudioSegment
 
 app = Flask(__name__)
+
+FOLDER_ROBOCZY = "roboczy_radio"
+if not os.path.exists(FOLDER_ROBOCZY):
+    os.makedirs(FOLDER_ROBOCZY)
+
+SFTP_HOST = os.environ.get("SFTP_HOST", "65.108.225.39")
+SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
+SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
+SFTP_PASS = os.environ.get("SFTP_PASS", "")
+
+DIR_JINGLES = "jingles"
+DIR_MAGAZYN = "magazyn_zyczen"
+DIR_POBRANE = "pobrane_od_sluchaczy"
+
+PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
+
+STREFA_EUROPA =…
+[12:17, 15.11.2026] Mariusz: import os
+import re
+import json
+import time
+import threading
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from flask import Flask, request
+import paramiko
+from gtts import gTTS
+import feedparser
+import yt_dlp
+from pydub import AudioSegment
+
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
@@ -69,7 +101,8 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_path):
                 try:
                     segment_audio = AudioSegment.from_file(temp_path)
-                    zmieniony_segment = segment_audio.speedup(playback_speed=1.15)
+                    # Zwiększone tempo do 1.35, żeby zlikwidować zamulenie i nadać radiowy pazur
+                    zmieniony_segment = segment_audio.speedup(playback_speed=1.35)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
                     print(f"Błąd przyspieszania audio: {e}")
@@ -81,7 +114,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             for temp_f in pliki_tymczasowe:
                 segment = AudioSegment.from_file(temp_f)
                 polaczony_segment += segment
-                polaczony_segment += AudioSegment.silent(duration=300)
+                polaczony_segment += AudioSegment.silent(duration=200)
             
             polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
@@ -236,15 +269,15 @@ def inteligentna_korekta(tekst):
 
 def daj_gatunek_na_godzine(godzina):
     if 18 <= godzina < 20:
-        return "Wielki Koncert Życzeń"
+        return "Wielki Koncert Życzeń!"
     elif 17 <= godzina < 18:
-        return "Piosenka na Życzenie"
+        return "Piosenka na Życzenie!"
     elif 6 <= godzina < 14:
-        return "najlepsze Disco Polo"
+        return "najlepsze Disco Polo!"
     elif 14 <= godzina < 22:
-        return "Italo Disco i energetyczne Eurodance"
+        return "Italo Disco i energetyczne Eurodance!"
     else:
-        return "klubowy miks muzyczny"
+        return "gorący klubowy miks muzyczny!"
 
 
 def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
@@ -256,18 +289,18 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
 
     if faza == "srodek":
         kwestie = (
-            ("glos", f"Radio Strefa Zero. Jesteśmy w połowie pasma! Teraz grają dla Was {gatunek_muzyki}."),
-            ("glos", f"Przypominamy o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}. Zostajcie z nami!")
+            ("glos", f"Uwaga! Tu Radio Strefa Zero! Jesteśmy dokładnie w połowie naszego pasma! Teraz gramy specjalnie dla Was: {gatunek_muzyki}"),
+            ("glos", f"Przypominamy o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}! Zostajcie z nami i bawcie się świetnie!")
         )
     elif faza == "koniec":
         kwestie = (
-            ("glos", f"To już końcówka tego bloku w Radiu Strefa Zero! Dziękujemy za wspólne chwile."),
-            ("glos", f"Już za chwilę kolejna porcja muzyki Dance i następna fala zabawy! Bądźcie z nami!")
+            ("glos", f"Ojej, to już niestety końcówka tego bloku w Radiu Strefa Zero! Dziękujemy, że jesteście z nami!"),
+            ("glos", f"Ale uwaga! Już za chwilę kolejna porcja najlepszej muzyki Dance i następna fala czystej zabawy! Bądźcie czujni!")
         )
     else:
         kwestie = (
-            ("glos", f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. Przez najbliższą godzinę królują {gatunek_muzyki}!"),
-            ("glos", f"Zamawiajcie utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}.")
+            ("glos", f"Radio Strefa Zero! Wybiła godzina {wyswietlana_godzina}! Przez najbliższe sześćdziesiąt minut królują u nas: {gatunek_muzyki}"),
+            ("glos", f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}! Lecimy z tym!")
         )
     return kwestie
 
@@ -315,15 +348,15 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if typ_audycji == "koncert":
             kwestie_audio = (
-                ("glos", f"Mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
-                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
-                ("glos", "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!"),
+                ("glos", f"Mamy niesamowitą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!"),
+                ("glos", f"Oto treść: {poprawiona_tresc}!"),
+                ("glos", "Pozdrawiamy i lecimy dalej w Radiu Strefa Zero!"),
             )
         else:
             kwestie_audio = (
-                ("glos", f"Mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}."),
-                ("glos", f"Treść: {poprawiona_tresc}."),
-                ("glos", "Świetny wybór, lecimy z muzyką!"),
+                ("glos", f"Super zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}!"),
+                ("glos", f"Treść wiadomości: {poprawiona_tresc}!"),
+                ("glos", "Ależ hit, lecimy z tym!"),
             )
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
