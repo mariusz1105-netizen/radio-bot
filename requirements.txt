@@ -8,3 +8,4 @@ feedparser
 pydub
 certifi
 urllib3
+edge-tts
