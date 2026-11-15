@@ -6,3 +6,5 @@ paramiko
 gTTS
 feedparser
 pydub
+certifi
+urllib3
