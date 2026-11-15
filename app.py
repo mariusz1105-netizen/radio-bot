@@ -70,7 +70,6 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_path):
                 try:
                     segment_audio = AudioSegment.from_file(temp_path)
-                    # Naturalne, spokojne tempo bez pędzenia
                     zmieniony_segment = segment_audio.speedup(playback_speed=1.10)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
@@ -253,7 +252,6 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     gatunek = daj_gatunek_na_godzine(docelowa_godzina_24h)
     nr_tel = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
-    # Losowe zestawy zwrotów, żeby za każdym razem brzmiało to inaczej i świeżo
     if faza == "srodek":
         warianty_srodek = [
             (
@@ -262,7 +260,7 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
             ),
             (
                 "Twoje ulubione Radio Strefa Zero gra bez przerwy!",
-                f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomościę na numer: {nr_tel} i zostań z nami."
+                f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań z nami."
             ),
             (
                 "Mijają kolejne chwile z Radiem Strefa Zero.",
@@ -291,8 +289,8 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
                 f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}."
             ),
             (
-                f"Witacie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}.",
-                f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomościę na numer: {nr_tel}."
+                f"Witajcie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}.",
+                f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomość na numer: {nr_tel}."
             ),
             (
                 f"Czas na dobrą muzykę w Radiu Strefa Zero! Przed nami godzina pełna dźwięków pod znakiem: {gatunek}.",
@@ -519,4 +517,21 @@ def endpoint_generuj_godzine():
         teraz = datetime.now(STREFA_EUROPA)
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="pocza
+            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
+        )
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
+        return "Błąd generowania pliku audio", 500
+    except Exception as e:
+        return f"Błąd endpointu: {e}", 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
