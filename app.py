@@ -11,7 +11,8 @@ import paramiko
 import requests
 import feedparser
 import yt_dlp
-from gtts import gTTS
+import asyncio
+import edge_tts
 from pydub import AudioSegment
 
 app = Flask(__name__)
@@ -56,6 +57,12 @@ def polacz_sftp():
     return transport, sftp
 
 
+async def async_generuj_edge_tts(tekst, sciezka_docelowa):
+    # Używamy naturalnego kobiecego głosu Microsoftu (Zofia)
+    communicate = edge_tts.Communicate(tekst, "pl-PL-ZofiaNeural")
+    await communicate.save(sciezka_docelowa)
+
+
 def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = list()
@@ -67,9 +74,9 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}"
             )
             
-            tts = gTTS(text=tekst, lang='pl', slow=False)
-            tts.save(temp_path)
-            pliki_tymczasowe.append(temp_path)
+            asyncio.run(async_generuj_edge_tts(tekst, temp_path))
+            if os.path.exists(temp_path):
+                pliki_tymczasowe.append(temp_path)
 
         if pliki_tymczasowe:
             polaczony_segment = AudioSegment.empty()
@@ -82,7 +89,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             return sciezka_koncowa
         return None
     except Exception as e:
-        print(f"Blad generatora gTTS: {e}")
+        print(f"Blad generatora Edge TTS: {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -404,7 +411,7 @@ def test_generuj_godzine():
                 transport.close()
             os.remove(sciezka)
             return f"Sukces! Wygenerowano i wysłano zapowiedź: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio przez gTTS", 500
+        return "Błąd generowania pliku audio przez Edge TTS", 500
     except Exception as e:
         return f"Błąd endpointu: {e}", 500
 
