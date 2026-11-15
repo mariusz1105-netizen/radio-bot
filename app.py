@@ -3,6 +3,7 @@ import re
 import json
 import time
 import threading
+import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request
@@ -69,8 +70,8 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             if os.path.exists(temp_path):
                 try:
                     segment_audio = AudioSegment.from_file(temp_path)
-                    # Przyspieszenie 1.35x nadaje żywą, radiową dynamiki
-                    zmieniony_segment = segment_audio.speedup(playback_speed=1.35)
+                    # Naturalne, spokojne tempo bez pędzenia
+                    zmieniony_segment = segment_audio.speedup(playback_speed=1.10)
                     zmieniony_segment.export(temp_path, format="mp3")
                 except Exception as e:
                     print(f"Błąd przyspieszania audio: {e}")
@@ -82,7 +83,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             for temp_f in pliki_tymczasowe:
                 segment = AudioSegment.from_file(temp_f)
                 polaczony_segment += segment
-                polaczony_segment += AudioSegment.silent(duration=200)
+                polaczony_segment += AudioSegment.silent(duration=350)
             
             polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
@@ -237,40 +238,68 @@ def inteligentna_korekta(tekst):
 
 def daj_gatunek_na_godzine(godzina):
     if 18 <= godzina < 20:
-        return "Wielki Koncert Życzeń!"
+        return "Wielkim Koncercie Życzeń"
     elif 17 <= godzina < 18:
-        return "Piosenka na Życzenie!"
+        return "Piosence na Życzenie"
     elif 6 <= godzina < 14:
-        return "najlepsze Disco Polo!"
+        return "najlepszych rytmach Disco Polo"
     elif 14 <= godzina < 22:
-        return "Italo Disco i energetyczne Eurodance!"
+        return "najlepszym Italo Disco i Eurodance"
     else:
-        return "gorący klubowy miks muzyczny!"
+        return "klubowym miksie muzycznym"
 
 
 def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
-    wyswietlana_godzina = (
-        24 if docelowa_godzina_24h == 0 else docelowa_godzina_24h
-    )
-    gatunek_muzyki = daj_gatunek_na_godzine(docelowa_godzina_24h)
-    nr_tel_slownie = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
+    gatunek = daj_gatunek_na_godzine(docelowa_godzina_24h)
+    nr_tel = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
+    # Losowe zestawy zwrotów, żeby za każdym razem brzmiało to inaczej i świeżo
     if faza == "srodek":
-        kwestie = (
-            ("glos", f"Halo, tu Radio Strefa Zero! Jesteśmy dokładnie w połowie naszego pasma! Teraz gramy specjalnie dla Was: {gatunek_muzyki}"),
-            ("glos", f"Przypominam o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}! Zostajcie z nami i bawcie się świetnie!")
-        )
+        warianty_srodek = [
+            (
+                "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gramy dla Was.",
+                f"Przypominam o darmowych wiadomościach z pozdrowieniami na numer: {nr_tel}. Bądźcie z nami."
+            ),
+            (
+                "Twoje ulubione Radio Strefa Zero gra bez przerwy!",
+                f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomościę na numer: {nr_tel} i zostań z nami."
+            ),
+            (
+                "Mijają kolejne chwile z Radiem Strefa Zero.",
+                f"Pamiętajcie o darmowych pozdrowieniach na numer: {nr_tel}. Miłego słuchania!"
+            )
+        ]
+        return random.choice(warianty_srodek)
+
     elif faza == "koniec":
-        kwestie = (
-            ("glos", f"To już niestety końcówka tego bloku w Radiu Strefa Zero! Dziękuję, że jesteście z nami!"),
-            ("glos", f"Ale uwaga! Już za chwilę kolejna porcja najlepszej muzyki Dance i następna fala czystej zabawy! Bądźcie czujni!")
-        )
+        warianty_koniec = [
+            (
+                "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście z nami.",
+                "Już niedługo kolejna porcja muzyki i następna fala dobrej zabawy. Do usłyszenia."
+            ),
+            (
+                "Powoli kończymy tę godzinę w Radiu Strefa Zero.",
+                "Zostajcie na naszej fali, bo za chwilę wracamy z kolejnymi muzycznymi hitami."
+            )
+        ]
+        return random.choice(warianty_koniec)
+
     else:
-        kwestie = (
-            ("glos", f"Radio Strefa Zero! Wybiła godzina {wyswietlana_godzina}! Przez najbliższe sześćdziesiąt minut królują u nas: {gatunek_muzyki}"),
-            ("glos", f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}! Lecimy z tym!")
-        )
-    return kwestie
+        warianty_poczatek = [
+            (
+                f"Radio Strefa Zero. Przez najbliższą godzinę zapraszam na spotkanie przy {gatunek}.",
+                f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}."
+            ),
+            (
+                f"Witacie w Radiu Strefa Zero! W tej godzinie gramy specjalnie dla Was w rytmie: {gatunek}.",
+                f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomościę na numer: {nr_tel}."
+            ),
+            (
+                f"Czas na dobrą muzykę w Radiu Strefa Zero! Przed nami godzina pełna dźwięków pod znakiem: {gatunek}.",
+                f"Pozdrawiajcie swoich bliskich przez darmowy numer: {nr_tel}. Miłej zabawy!"
+            )
+        ]
+        return random.choice(warianty_poczatek)
 
 
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
@@ -316,15 +345,15 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if typ_audycji == "koncert":
             kwestie_audio = (
-                ("glos", f"Mam wspaniałą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}!"),
-                ("glos", f"Oto treść: {poprawiona_tresc}!"),
+                ("glos", f"Mam wspaniałą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
+                ("glos", f"Oto treść: {poprawiona_tresc}."),
                 ("glos", "Pozdrawiam najmocniej i gramy dalej w Radiu Strefa Zero!"),
             )
         else:
             kwestie_audio = (
-                ("glos", f"Super zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}!"),
-                ("glos", f"Treść wiadomości: {poprawiona_tresc}!"),
-                ("glos", "Ależ hit, lecimy z tym!"),
+                ("glos", f"Super zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}."),
+                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
+                ("glos", "Świetny wybór, lecimy z muzyką!"),
             )
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
@@ -490,21 +519,4 @@ def endpoint_generuj_godzine():
         teraz = datetime.now(STREFA_EUROPA)
         nazwa_pliku = teraz.strftime("godzina_%Y%m%d_%H%M%S.mp3")
         sciezka = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
-        )
-        if sciezka and os.path.exists(sciezka):
-            transport, sftp = polacz_sftp()
-            try:
-                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
-            finally:
-                sftp.close()
-                transport.close()
-            os.remove(sciezka)
-            return f"Wygenerowano i wysłano zapowiedź godzinową: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio", 500
-    except Exception as e:
-        return f"Błąd endpointu: {e}", 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+            zbuduj_zapowiedz_godzinowa(teraz.hour, faza="pocza
