@@ -2,7 +2,3 @@ flask
 requests
 yt-dlp
 gunicorn
-paramiko
-gTTS
-feedparser
-pydub
