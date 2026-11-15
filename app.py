@@ -527,4 +527,3 @@ def endpoint_generuj_godzine():
             zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
         )
         if sciezka and os.path.exists(sciezka):
-            transport, sf
