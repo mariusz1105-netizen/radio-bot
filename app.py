@@ -526,4 +526,4 @@ def endpoint_generuj_godzine():
         sciezka = generuj_audio_mp3(
             zbuduj_zapowiedz_godzinowa(teraz.hour, faza="poczatek"), nazwa_pliku
         )
-        if sciezka and os.path.exists(sciezka):
+    if sciezka and os.path.exists(sciezka):
