@@ -517,3 +517,19 @@ def petla_zegara_i_emisji():
                             if os.path.exists(lokalny_temp_utwor):
                                 os.remove(lokalny_temp_utwor)
                         kolejka.remove(paczka)
+                        zapisz_kolejke_sftp(sftp, kolejka)
+                        ostatnia_e_timestamp = obecny_ts
+                finally:
+                    sftp.close()
+                    transport.close()
+
+        except Exception as e:
+            print(f"Błąd w pętli głównej zegara: {e}")
+        
+        time.sleep(15)
+
+
+if __name__ == "__main__":
+    watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+    watek_tlo.start()
+    app.run(host="0.0.0.0", port=5000)
