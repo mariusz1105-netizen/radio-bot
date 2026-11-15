@@ -2,13 +2,12 @@ import os
 import re
 import json
 import time
-import asyncio
 import threading
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request
 import paramiko
-import edge_tts
+from gtts import gTTS
 import feedparser
 import yt_dlp
 from pydub import AudioSegment
@@ -29,9 +28,6 @@ DIR_MAGAZYN = "magazyn_zyczen"
 DIR_POBRANE = "pobrane_od_sluchaczy"
 
 PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
-
-GLOS_KOBIETA = "pl-PL-ZofiaNeural"
-GLOS_MEZCZYZNA = "pl-PL-MarekNeural"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
@@ -58,39 +54,33 @@ def polacz_sftp():
     return transport, sftp
 
 
-async def _generuj_segment_async(tekst, glos, plik_wyjsciowy):
-    communicate = edge_tts.Communicate(tekst, glos)
-    await communicate.save(plik_wyjsciowy)
-
-
 def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = list()
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         for idx, (glos, tekst) in enumerate(lista_kwestii):
             if not tekst or not tekst.strip():
                 continue
             temp_path = os.path.join(
                 FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}"
             )
-            loop.run_until_complete(
-                _generuj_segment_async(tekst, glos, temp_path)
-            )
+            tts = gTTS(text=tekst, lang='pl', slow=False)
+            tts.save(temp_path)
             if os.path.exists(temp_path):
                 pliki_tymczasowe.append(temp_path)
-        loop.close()
 
         if pliki_tymczasowe:
-            with open(sciezka_koncowa, "wb") as outfile:
-                for temp_f in pliki_tymczasowe:
-                    with open(temp_f, "rb") as infile:
-                        outfile.write(infile.read())
+            polaczony_segment = AudioSegment.empty()
+            for temp_f in pliki_tymczasowe:
+                segment = AudioSegment.from_file(temp_f)
+                polaczony_segment += segment
+                polaczony_segment += AudioSegment.silent(duration=500)
+            
+            polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
         return None
     except Exception as e:
-        print(f"Blad TTS: {e}")
+        print(f"Blad TTS (gTTS): {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -259,18 +249,18 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
 
     if faza == "srodek":
         kwestie = (
-            (GLOS_KOBIETA, f"Radio Strefa Zero. Jesteśmy w połowie pasma! Teraz grają dla Was {gatunek_muzyki}."),
-            (GLOS_MEZCZYZNA, f"Przypominamy o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}. Zostajcie z nami!")
+            ("glos", f"Radio Strefa Zero. Jesteśmy w połowie pasma! Teraz grają dla Was {gatunek_muzyki}."),
+            ("glos", f"Przypominamy o darmowych SMS-ach z pozdrowieniami na numer: {nr_tel_slownie}. Zostajcie z nami!")
         )
     elif faza == "koniec":
         kwestie = (
-            (GLOS_KOBIETA, f"To już końcówka tego bloku w Radiu Strefa Zero! Dziękujemy za wspólne chwile."),
-            (GLOS_MEZCZYZNA, f"Już za chwilę kolejna porcja muzyki Dance i następna fala zabawy! Bądźcie z nami!")
+            ("glos", f"To już końcówka tego bloku w Radiu Strefa Zero! Dziękujemy za wspólne chwile."),
+            ("glos", f"Już za chwilę kolejna porcja muzyki Dance i następna fala zabawy! Bądźcie z nami!")
         )
     else:
         kwestie = (
-            (GLOS_KOBIETA, f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. Przez najbliższą godzinę królują {gatunek_muzyki}!"),
-            (GLOS_MEZCZYZNA, f"Zamawiajcie utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}.")
+            ("glos", f"Radio Strefa Zero. Wybiła godzina {wyswietlana_godzina}. Przez najbliższą godzinę królują {gatunek_muzyki}!"),
+            ("glos", f"Zamawiajcie utwory i pozdrawiajcie bliskich na darmowy numer SMS: {nr_tel_slownie}.")
         )
     return kwestie
 
@@ -318,15 +308,15 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if typ_audycji == "koncert":
             kwestie_audio = (
-                (GLOS_KOBIETA, f"Marek, zobacz co nam przysłali! Mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
-                (GLOS_MEZCZYZNA, f"Już czytam treść: {poprawiona_tresc}."),
-                (GLOS_KOBIETA, "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!"),
+                ("glos", f"Mamy nową wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
+                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
+                ("glos", "Pozdrawiamy i gramy dalej w Radiu Strefa Zero!"),
             )
         else:
             kwestie_audio = (
-                (GLOS_MEZCZYZNA, f"Zofia, mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}."),
-                (GLOS_KOBIETA, f"Oto treść wiadomości: {poprawiona_tresc}."),
-                (GLOS_MEZCZYZNA, "Świetny wybór, lecimy z muzyką!"),
+                ("glos", f"Mamy nowe zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}."),
+                ("glos", f"Treść: {poprawiona_tresc}."),
+                ("glos", "Świetny wybór, lecimy z muzyką!"),
             )
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
@@ -366,7 +356,6 @@ def petla_zegara_i_emisji():
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            # --- AUTOMATYCZNE CZYSZCZENIE STARYCH PLIKÓW CO 30 MINUT (starsze niż 2 godziny) ---
             if obecny_ts - ostatnie_czyszczenie_ts > 1800:
                 transport, sftp = polacz_sftp()
                 try:
@@ -378,7 +367,6 @@ def petla_zegara_i_emisji():
                                 czas_modyfikacji = attr.st_mtime
                                 if obecny_ts - czas_modyfikacji > 7200:
                                     sftp.remove(sciezka_pliku)
-                                    print(f"Usunięto stary plik z jingles: {plik}")
                             except Exception:
                                 pass
                 except Exception as e:
