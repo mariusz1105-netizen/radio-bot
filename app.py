@@ -362,17 +362,64 @@ def webhook_sms():
     return "<Response></Response>", 200
 
 
+@app.route("/generuj-godzine", methods=["GET"])
+def test_generuj_godzine():
+    try:
+        teraz = datetime.now(STREFA_EUROPA)
+        docelowa_godzina = teraz.hour
+        nazwa_pliku = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+        
+        sciezka = generuj_audio_mp3(
+            zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku
+        )
+        
+        if sciezka and os.path.exists(sciezka):
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+            finally:
+                sftp.close()
+                transport.close()
+            os.remove(sciezka)
+            return f"Sukces! Wygenerowano i wysłano zapowiedź: {nazwa_pliku}", 200
+        return "Błąd generowania pliku audio przez Edge TTS", 500
+    except Exception as e:
+        return f"Błąd endpointu: {e}", 500
+
+
 def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
     ostatnia_e_timestamp = 0
     ostatnia_generowana_faza = ""
+    ostatnie_czyszczenie_ts = 0
 
     while True:
         try:
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            czas_przyszly = teraz + timedelta(minutes=10)
+            # Automatyczne czyszczenie starych plików z folderu jingles (starsze niż 2 godziny)
+            if obecny_ts - ostatnie_czyszczenie_ts > 1800:  # sprawdza co 30 minut
+                transport, sftp = polacz_sftp()
+                try:
+                    for plik in sftp.listdir(DIR_JINGLES):
+                        if plik.endswith(".mp3"):
+                            sciezka_pliku = f"{DIR_JINGLES}/{plik}"
+                            try:
+                                attr = sftp.stat(sciezka_pliku)
+                                if obecny_ts - attr.st_mtime > 7200:  # 7200 sekund = 2 godziny
+                                    sftp.remove(sciezka_pliku)
+                            except Exception:
+                                pass
+                except Exception as e:
+                    print(f"Błąd czyszczenia starych plików: {e}")
+                finally:
+                    sftp.close()
+                    transport.close()
+                    ostatnie_czyszczenie_ts = obecny_ts
+
+            # Generowanie zapowiedzi z 30-minutowym wyprzedzeniem
+            czas_przyszly = teraz + timedelta(minutes=30)
             docelowa_godzina = czas_przyszly.hour
             minuta_teraz = teraz.minute
             godzina_teraz = teraz.hour
@@ -404,7 +451,7 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
-            # Sprawdzanie audycji na życzenie według Twoich nowych, dokładnych wytycznych
+            # Sprawdzanie audycji na życzenie według harmonogramu
             dzien = teraz.weekday()
             godzina = teraz.hour
 
