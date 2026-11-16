@@ -388,11 +388,11 @@ def petla_zegara_i_emisji():
                     transport.close()
                     ostatnie_czyszczenie_ts = obecny_ts
 
-            # Generowanie zapowiedzi godziny oraz info z 20-minutowym wyprzedzeniem
+            # Generowanie zapowiedzi godziny oraz info z 20-minutowym wyprzedzeniem (bezpieczny przedział)
             czas_przyszly = teraz + timedelta(minutes=20)
             docelowa_godzina = czas_przyszly.hour
 
-            if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
+            if czas_przyszly.minute <= 2 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
                     # 1. Plik z samą wymawianą godziną
@@ -401,6 +401,7 @@ def petla_zegara_i_emisji():
                     if sciezka_g and os.path.exists(sciezka_g):
                         sftp.put(sciezka_g, f"{DIR_JINGLES}/{nazwa_pliku_godzina}")
                         os.remove(sciezka_g)
+                        print(f"Wysłano plik godziny: {nazwa_pliku_godzina}")
 
                     # 2. Plik z informacjami RMF (jeśli mieszczymy się w godzinach 6:00-16:00)
                     if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
@@ -411,9 +412,11 @@ def petla_zegara_i_emisji():
                             if sciezka_i and os.path.exists(sciezka_i):
                                 sftp.put(sciezka_i, f"{DIR_JINGLES}/{nazwa_pliku_info}")
                                 os.remove(sciezka_i)
+                                print(f"Wysłano plik info: {nazwa_pliku_info}")
                 finally:
                     sftp.close()
                     transport.close()
+                
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
 
             # Sprawdzanie audycji na życzenie według harmonogramu
