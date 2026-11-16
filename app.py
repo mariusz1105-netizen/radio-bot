@@ -260,10 +260,24 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if "koncert" in t_low:
             typ_audycji = "koncert"
-            czysta_tresc = re.sub(r"(?i)^koncert\s*życzeń[:\-\s]|^koncert\s*zyczen[:\-\s]", "", tresc_sms).strip()
         else:
             typ_audycji = "piosenka"
-            czysta_tresc = re.sub(r"(?i)^piosenka\s*na\s*życzenie[:\-\s]|^piosenka\s*na\s*zyczenie[:\-\s]", "", tresc_sms).strip()
+
+        # Dokładne czyszczenie ze zwrotów instrukcyjnych wysyłanych w SMS
+        czysta_tresc = tresc_sms
+        wzorce_do_wyciecia = [
+            r"(?i)^koncert\s*życzeń[:\-\s]*",
+            r"(?i)^koncert\s*zyczen[:\-\s]*",
+            r"(?i)^piosenka\s*na\s*życzenie[:\-\s]*",
+            r"(?i)^piosenka\s*na\s*zyczenie[:\-\s]*",
+            r"(?i)wyślij\s*sms[^\.\,\!][\.\,\!\s]",
+            r"(?i)zamów\s*piosenkę[^\.\,\!][\.\,\!\s]",
+            r"(?i)zamow\s*piosenke[^\.\,\!][\.\,\!\s]"
+        ]
+        for wzorzec in wzorce_do_wyciecia:
+            czysta_tresc = re.sub(wzorzec, "", czysta_tresc)
+        
+        czysta_tresc = czysta_tresc.strip()
 
         imie_nadawcy = "Słuchacza"
         match_podpis = re.search(r"[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})", czysta_tresc)
@@ -288,14 +302,14 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if typ_audycji == "koncert":
             kwestie_audio = [
-                ("glos", f"Uwaga! Specjalne zgłoszenie do naszego Koncertu Życzeń przesłał {imie_nadawcy}."),
-                ("glos", f"Oto treść wiadomości: {poprawiona_tresc}."),
+                ("glos", f"Mamy nowe zgłoszenie do Koncertu Życzeń od słuchacza: {imie_nadawcy}."),
+                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
                 ("glos", f"Chcesz dołączyć do zabawy? Wyślij darmowy SMS na nasz numer: {NUMER_TEL_TEKST}. Gramy dalej w Radiu Strefa Zero!")
             ]
         else:
             kwestie_audio = [
-                ("glos", f"Mamy nową Piosenkę na Życzenie od słuchacza: {imie_nadawcy}."),
-                ("glos", f"Treść pozdrowień: {poprawiona_tresc}."),
+                ("glos", f"Nowa Piosenka na Życzenie od: {imie_nadawcy}."),
+                ("glos", f"Pozdrowienia: {poprawiona_tresc}."),
                 ("glos", f"Zamawiaj kolejne utwory pod darmowym numerem: {NUMER_TEL_TEKST}. Słuchaj Radia Strefa Zero!")
             ]
 
