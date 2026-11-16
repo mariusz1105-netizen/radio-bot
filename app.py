@@ -119,15 +119,18 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
 
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
-    sciezka_wyjsciowa = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
+    # Zapewniamy, że pracujemy na czystej bazie nazwy bez rozszerzeń
+    baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
+    
     warianty_zapytan = [
         f"ytsearch1:{zapytanie} audio",
         f"ytsearch1:{zapytanie} piosenka",
         f"ytsearch1:{zapytanie}",
     ]
+    
     opcje_ytdlp = {
         "format": "bestaudio/best",
-        "outtmpl": f"{sciezka_wyjsciowa}.%(ext)s",
+        "outtmpl": f"{baza_nazwy}.%(ext)s",
         "noplaylist": True,
         "quiet": True,
         "socket_timeout": 25,
@@ -137,15 +140,20 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             "preferredquality": "192",
         }],
     }
+
     for query in warianty_zapytan:
         try:
             with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
                 ydl.download([query])
-            gotowy_plik = f"{sciezka_wyjsciowa}.mp3"
-            if os.path.exists(gotowy_plik):
+            
+            # Sprawdzamy czy powstał poprawny plik .mp3
+            gotowy_plik = f"{baza_nazwy}.mp3"
+            if os.path.exists(gotowy_plik) and os.path.getsize(gotowy_plik) > 10000:
                 return gotowy_plik
-        except Exception:
+        except Exception as e:
+            print(f"Błąd pobierania yt-dlp dla zapytania '{query}': {e}")
             continue
+            
     return None
 
 
@@ -177,7 +185,6 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
-    # Bardzo bogaty słownik poprawek i slangowych skrótów SMS, żeby lektor nigdy nie kaleczył słów
     slownik_poprawek = {
         "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
         "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
@@ -234,7 +241,6 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
         return random.choice(warianty_koniec)
         
     else:
-        # Bardzo bogata pula zmiennych reklam, dżingli i zapowiedzi stacji
         warianty_poczatek = [
             [
                 ("glos", f"Radio Strefa Zero! W tej godzinie zapraszam na pasmo przy {gatunek}."),
@@ -254,7 +260,7 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
             ],
             [
                 ("glos", "Gorące hity, taneczne bity i najlepsza atmosfera tylko w Radiu Strefa Zero!"),
-                ("glos", f"Napisz do nas SMS na numer {NUMER_TEL_TEKST} i powiedz, jaka piosenki ma zagrać dla Ciebie specjalnie.")
+                ("glos", f"Napisz do nas SMS na numer {NUMER_TEL_TEKST} i powiedz, jaka piosenka ma zagrać dla Ciebie specjalnie.")
             ]
         ]
         return random.choice(warianty_poczatek)
@@ -289,7 +295,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             if not sciezka_piosenki_na_dysku:
                 bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie_muzyczne, bezpieczna_nazwa)
-                if lokalne_mp3 and os.path.exists(lokalne_mp3):
+                if lokalne_mp3 and os.path.exists(lokalny_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
                     sftp.put(lokalny_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
@@ -297,7 +303,6 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
-        # Kolejność: Najpierw zapowiedź reklamy/zamówienia, podanie numeru tel, a potem muzyka
         if typ_audycji == "koncert":
             kwestie_audio = [
                 ("glos", f"Uwaga! Specjalne zgłoszenie do naszego Koncertu Życzeń przesłał {imie_nadawcy}."),
@@ -362,7 +367,6 @@ def petla_zegara_i_emisji():
             minuta_teraz = teraz.minute
             godzina_teraz = teraz.hour
 
-            # Generowanie zapowiedzi o pełnych godzinach
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
@@ -376,7 +380,6 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
 
-            # Wstawki w połowie godziny (minuta 30)
             faza_klucz_srodek = f"{godzina_teraz}_30"
             if minuta_teraz == 30 and ostatnia_generowana_faza != faza_klucz_srodek:
                 transport, sftp = polacz_sftp()
@@ -391,7 +394,6 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
-            # Sprawdzanie audycji na życzenie (Koncert / Piosenka na życzenie) z zachowaniem odstępu
             dzien = teraz.weekday()
             godzina = teraz.hour
 
@@ -429,7 +431,6 @@ def petla_zegara_i_emisji():
         time.sleep(15)
 
 
-# AUTOMATYCZNY START WĄTKU (działa również poprawnie przy starcie aplikacji)
 if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("RENDER") or True:
     watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
     watek_tlo.start()
