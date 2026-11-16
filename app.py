@@ -106,7 +106,6 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
 
 
 def pobierz_aktualne_newsy_rmf():
-    """Pobiera najnowsze nagłówki wiadomości z RSS RMF FM w godzinach 6:00-16:00 codziennie"""
     teraz = datetime.now(STREFA_EUROPA)
     if teraz.weekday() in INFO_RMF_DNI and INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC:
         try:
@@ -263,7 +262,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         else:
             typ_audycji = "piosenka"
 
-        # Dokładne czyszczenie ze zwrotów instrukcyjnych wysyłanych w SMS
+        # Czyszczenie ze zwrotów instrukcyjnych
         czysta_tresc = tresc_sms
         wzorce_do_wyciecia = [
             r"(?i)^koncert\s*życzeń[:\-\s]*",
@@ -292,7 +291,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             if not sciezka_piosenki_na_dysku:
                 bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie_muzyczne, bezpieczna_nazwa)
-                if lokalne_mp3 and os.path.exists(lokalny_mp3):
+                if lokalne_mp3 and os.path.exists(lokalne_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
                     sftp.put(lokalny_mp3, zdalna_piosenka)
                     sciezka_piosenki_na_dysku = zdalna_piosenka
@@ -382,7 +381,7 @@ def petla_zegara_i_emisji():
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            # Automatyczne czyszczenie starych plików z folderu jingles (starsze niż 2 godziny)
+            # Czyszczenie starych plików z jingles (starsze niż 2 godziny)
             if obecny_ts - ostatnie_czyszczenie_ts > 1800:
                 transport, sftp = polacz_sftp()
                 try:
@@ -402,14 +401,13 @@ def petla_zegara_i_emisji():
                     transport.close()
                     ostatnie_czyszczenie_ts = obecny_ts
 
-            # Generowanie zapowiedzi godziny oraz info z 20-minutowym wyprzedzeniem (bezpieczny przedział)
+            # Generowanie zapowiedzi godziny oraz info z 20-minutowym wyprzedzeniem
             czas_przyszly = teraz + timedelta(minutes=20)
             docelowa_godzina = czas_przyszly.hour
 
             if czas_przyszly.minute <= 2 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
-                    # 1. Plik z samą wymawianą godziną
                     nazwa_pliku_godzina = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka_g = generuj_audio_mp3(zbuduj_tylko_godzine(docelowa_godzina), nazwa_pliku_godzina)
                     if sciezka_g and os.path.exists(sciezka_g):
@@ -417,7 +415,6 @@ def petla_zegara_i_emisji():
                         os.remove(sciezka_g)
                         print(f"Wysłano plik godziny: {nazwa_pliku_godzina}")
 
-                    # 2. Plik z informacjami RMF (jeśli mieszczymy się w godzinach 6:00-16:00)
                     if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
                         kwestie_info = zbuduj_informacje_rmf()
                         if kwestie_info:
@@ -450,14 +447,35 @@ def petla_zegara_i_emisji():
                     kolejka = wczytaj_kolejke_sftp(sftp)
                     paczka = next((el for el in kolejka if el.get("audycja") == aktywna_audycja), None)
                     if paczka:
-                        nazwa_glos = os.path.basename(paczka.get("plik_glos"))
-                        sftp.rename(paczka.get("plik_glos"), f"{DIR_JINGLES}/{nazwa_glos}")
-                        if paczka.get("plik_piosenka"):
-                            lokalny_temp_utwor = os.path.join(FOLDER_ROBOCZY, "emisja_utwor.mp3")
-                            sftp.get(paczka.get("plik_piosenka"), lokalny_temp_utwor)
-                            sftp.put(lokalny_temp_utwor, f"{DIR_JINGLES}/wiadomosc_utwor_{int(obecny_ts)}.mp3")
-                            if os.path.exists(lokalny_temp_utwor):
-                                os.remove(lokalny_temp_utwor)
+                        lokalny_glos = os.path.join(FOLDER_ROBOCZY, "temp_glos.mp3")
+                        lokalny_utwor = os.path.join(FOLDER_ROBOCZY, "temp_utwor.mp3")
+                        lokalna_wspolna = os.path.join(FOLDER_ROBOCZY, f"emisja_razem_{int(obecny_ts)}.mp3")
+                        
+                        try:
+                            # Pobieramy plik z głosem lektora z SFTP
+                            sftp.get(paczka.get("plik_glos"), lokalny_glos)
+                            audio_calosc = AudioSegment.from_file(lokalny_glos)
+                            
+                            # Sklejamy z piosenką (jeden nierozerwalny plik mp3)
+                            if paczka.get("plik_piosenka"):
+                                sftp.get(paczka.get("plik_piosenka"), lokalny_utwor)
+                                audio_utwor = AudioSegment.from_file(lokalny_utwor)
+                                audio_calosc += AudioSegment.silent(duration=500) + audio_utwor
+                            
+                            audio_calosc.export(lokalna_wspolna, format="mp3")
+                            
+                            # Wysyłamy jeden gotowy plik do jingles
+                            nazwa_docelowa = f"duet_{int(obecny_ts)}.mp3"
+                            sftp.put(lokalna_wspolna, f"{DIR_JINGLES}/{nazwa_docelowa}")
+                            print(f"Wyemitowano połączony plik życzeń: {nazwa_docelowa}")
+                            
+                        except Exception as inner_e:
+                            print(f"Błąd sklejania audio do emisji: {inner_e}")
+                        finally:
+                            for f_temp in [lokalny_glos, lokalny_utwor, lokalna_wspolna]:
+                                if os.path.exists(f_temp):
+                                    os.remove(f_temp)
+
                         kolejka.remove(paczka)
                         zapisz_kolejke_sftp(sftp, kolejka)
                         ostatnia_e_timestamp = obecny_ts
