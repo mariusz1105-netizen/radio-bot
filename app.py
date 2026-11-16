@@ -177,10 +177,15 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
 
 def inteligentna_korekta(tekst):
     t = tekst.lower()
+    # Bardzo bogaty słownik poprawek i slangowych skrótów SMS, żeby lektor nigdy nie kaleczył słów
     slownik_poprawek = {
         "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
-        "pozdrowienia": "pozdrowienia", "pozdrawiam": "pozdrawiam", "dzien": "dzień",
-        "urodziny": "urodziny", "dziekuje": "dziękuję", "sie": "się", "ze": "że", "dzis": "dziś"
+        "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
+        "dzien": "dzień", "urodziny": "urodziny", "imieniny": "imieniny", "dziekuje": "dziękuję",
+        "dzieki": "dzięki", "sie": "się", "ze": "że", "dzis": "dziś", "tez": "też",
+        "wogole": "w ogóle", "narazie": "na razie", "najlepszego": "najlepszego",
+        "caluski": "całuski", "pozdrowionka": "pozdrowionka", "muzyczka": "muzyczka",
+        "piosenka": "piosenka", "utworek": "utworek", "graj": "graj", "zagraj": "zagraj"
     }
     poprawione = [slownik_poprawek.get(s.strip(".,!?"), s) for s in t.split()]
     return " ".join(poprawione)
@@ -203,17 +208,33 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     gatunek = daj_gatunek_na_godzine(docelowa_godzina_24h)
     
     if faza == "srodek":
-        return [
-            ("glos", "Słuchacie Radia Strefa Zero! Jesteśmy w stałym paśmie muzycznym."),
-            ("glos", f"Przypominam o naszym darmowym numerze SMS na pozdrowienia i zamówienia: {NUMER_TEL_TEKST}. Zostańcie z nami!")
+        warianty_srodek = [
+            [
+                ("glos", "Słuchasz Radia Strefa Zero! Jesteśmy w stałym paśmie muzycznym."),
+                ("glos", f"Masz ochotę na dedykację? Wyślij darmowy SMS na nasz numer: {NUMER_TEL_TEKST}. Zostań z nami!")
+            ],
+            [
+                ("glos", "Radio Strefa Zero – Twoje ulokowanie najlepszej muzyki w sieci!"),
+                ("glos", f"Przypominam o darmowym numerze SMS do kontaktu ze studiem: {NUMER_TEL_TEKST}.")
+            ]
         ]
+        return random.choice(warianty_srodek)
+        
     elif faza == "koniec":
-        return [
-            ("glos", "To już finał tego bloku godzinowego w Radiu Strefa Zero."),
-            ("glos", f"Chcesz zadedykować piosenkę bliskiej osobie? Wyślij SMS na numer {NUMER_TEL_TEKST}. Za chwilę wracamy z muzyką!")
+        warianty_koniec = [
+            [
+                ("glos", "To już finał tego bloku godzinowego w Radiu Strefa Zero."),
+                ("glos", f"Chcesz zadedykować piosenkę bliskiej osobie? Wyślij SMS na numer {NUMER_TEL_TEKST}. Za chwilę wracamy z muzyką!")
+            ],
+            [
+                ("glos", "Powoli kończymy tę godzinę na antenie Radia Strefa Zero."),
+                ("glos", f"Nie zmieniaj fali! Zamówienia i pozdrowienia wysyłajcie na numer: {NUMER_TEL_TEKST}.")
+            ]
         ]
+        return random.choice(warianty_koniec)
+        
     else:
-        # Propozycje nowych cyklicznych zapowiedzi i reklam stacji
+        # Bardzo bogata pula zmiennych reklam, dżingli i zapowiedzi stacji
         warianty_poczatek = [
             [
                 ("glos", f"Radio Strefa Zero! W tej godzinie zapraszam na pasmo przy {gatunek}."),
@@ -226,6 +247,14 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
             [
                 ("glos", f"Witamy w Radiu Strefa Zero! Przed nami godzina pełna energii pod znakiem: {gatunek}."),
                 ("glos", f"Twoje radio, Twoja muzyka. Pamiętaj o darmowym numerze SMS: {NUMER_TEL_TEKST}.")
+            ],
+            [
+                ("glos", "Słuchasz najlepszego radia internetowego – Radia Strefa Zero!"),
+                ("glos", f"Sponsorem dzisiejszego pasma są dobre wibracje i mocne klubowe brzmienia. Pozdrawiaj bliskich pod numerem: {NUMER_TEL_TEKST}.")
+            ],
+            [
+                ("glos", "Gorące hity, taneczne bity i najlepsza atmosfera tylko w Radiu Strefa Zero!"),
+                ("glos", f"Napisz do nas SMS na numer {NUMER_TEL_TEKST} i powiedz, jaka piosenki ma zagrać dla Ciebie specjalnie.")
             ]
         ]
         return random.choice(warianty_poczatek)
