@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import paramiko
 import requests
+import feedparser
 import yt_dlp
 import asyncio
 import edge_tts
@@ -33,18 +34,23 @@ PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
-# Koncert życzeń: czwartki i piątki w godzinach 18:00 - 20:00
-KONCERT_ZYCZEN_DNI = (3, 4)  # 3=Czwartek, 4=Piątek
-KONCERT_ZYCZEN_START = 18
-KONCERT_ZYCZEN_KONIEC = 20
+# Koncert życzeń: Poniedziałek - Piątek, od 17:00 do 19:00
+KONCERT_ZYCZEN_DNI = (0, 1, 2, 3, 4)
+KONCERT_ZYCZEN_START = 17
+KONCERT_ZYCZEN_KONIEC = 19
 
-# Piosenka na życzenie: od poniedziałku do piątku (co 3 godziny)
-PIOSENKA_NA_ZYCZENIE_DNI = (0, 1, 2, 3, 4)
-PIOSENKA_NA_ZYCZENIE_START = 8
-PIOSENKA_NA_ZYCZENIE_KONIEC = 22
+# Piosenka na życzenie: Piątek - Niedziela, od 17:00 do 21:00
+PIOSENKA_NA_ZYCZENIE_DNI = (4, 5, 6)
+PIOSENKA_NA_ZYCZENIE_START = 17
+PIOSENKA_NA_ZYCZENIE_KONIEC = 21
 
-# Odstęp emisji dla piosenek na życzenie (co 3 godziny = 10800 sekund)
-ODSTEP_EMISJI_SEKUNDY = 10800
+# Serwis informacyjny z RMF FM: Każdy dzień (poniedziałek - niedziela), od 6:00 do 16:00
+INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
+INFO_RMF_START = 6
+INFO_RMF_KONIEC = 16
+
+# Odstęp emisji dla piosenek na życzenie (co 1 godzinę / 3600 sekund)
+ODSTEP_EMISJI_SEKUNDY = 3600
 
 NUMER_TEL_TEKST = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
@@ -99,6 +105,26 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 os.remove(temp_f)
 
 
+def pobierz_aktualne_newsy_rmf():
+    """Pobiera najnowsze nagłówki wiadomości z RSS RMF FM w godzinach 6:00-16:00 codziennie"""
+    teraz = datetime.now(STREFA_EUROPA)
+    if teraz.weekday() in INFO_RMF_DNI and INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC:
+        try:
+            url_rss = "https://www.rmf24.pl/fakty/rss"
+            feed = feedparser.parse(url_rss)
+            newsy = []
+            if feed.entries:
+                for entry in feed.entries[:2]:
+                    tytul = entry.get("title", "").strip()
+                    if tytul:
+                        newsy.append(tytul)
+            if newsy:
+                return "Najświeższe informacje z RMF FM: " + ". ".join(newsy) + "."
+        except Exception as e:
+            print(f"Błąd pobierania newsów RMF: {e}")
+    return ""
+
+
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     slowa_kluczowe = [s.lower() for s in re.findall(r"\w+", zapytanie) if len(s) > 2]
     if not slowa_kluczowe:
@@ -119,7 +145,6 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
 
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
-    # Zapewniamy, że pracujemy na czystej bazie nazwy bez rozszerzeń
     baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     
     warianty_zapytan = [
@@ -146,7 +171,6 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
                 ydl.download([query])
             
-            # Sprawdzamy czy powstał poprawny plik .mp3
             gotowy_plik = f"{baza_nazwy}.mp3"
             if os.path.exists(gotowy_plik) and os.path.getsize(gotowy_plik) > 10000:
                 return gotowy_plik
@@ -199,20 +223,21 @@ def inteligentna_korekta(tekst):
 
 
 def daj_gatunek_na_godzine(godzina):
-    if 18 <= godzina < 20:
+    if 17 <= godzina < 19:
         return "Wielkim Koncercie Życzeń"
-    elif 8 <= godzina < 18:
-        return "Piosence na Życzenie oraz najlepszych hitach"
+    elif 17 <= godzina < 21:
+        return "Piosence na Życzenie"
+    elif 6 <= godzina < 16:
+        return "najlepszych informacjach z kraju i muzyce"
     elif 6 <= godzina < 14:
         return "najlepszych rytmach Disco Polo i dance"
-    elif 14 <= godzina < 22:
-        return "najlepszym Italo Disco, Eurodance oraz klubowych bitach"
     else:
-        return "nocnym, klubowym miksie muzycznym"
+        return "najlepszym Italo Disco, Eurodance oraz klubowych bitach"
 
 
 def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     gatunek = daj_gatunek_na_godzine(docelowa_godzina_24h)
+    newsy_rmf = pobierz_aktualne_newsy_rmf()
     
     if faza == "srodek":
         warianty_srodek = [
@@ -221,7 +246,7 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
                 ("glos", f"Masz ochotę na dedykację? Wyślij darmowy SMS na nasz numer: {NUMER_TEL_TEKST}. Zostań z nami!")
             ],
             [
-                ("glos", "Radio Strefa Zero – Twoje ulokowanie najlepszej muzyki w sieci!"),
+                ("glos", "Radio Strefa Zero – najlepsze hity w Twoim głośniku!"),
                 ("glos", f"Przypominam o darmowym numerze SMS do kontaktu ze studiem: {NUMER_TEL_TEKST}.")
             ]
         ]
@@ -241,29 +266,14 @@ def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
         return random.choice(warianty_koniec)
         
     else:
-        warianty_poczatek = [
-            [
-                ("glos", f"Radio Strefa Zero! W tej godzinie zapraszam na pasmo przy {gatunek}."),
-                ("glos", f"Zamawiaj utwory i wysyłaj pozdrowienia na darmowy numer telefonu: {NUMER_TEL_TEKST}.")
-            ],
-            [
-                ("glos", "Czas na wyjątkowy kącik wspomnień i muzyczną podróż w Radiu Strefa Zero!"),
-                ("glos", f"Masz ulubiony utwór z dawnych lat? Napisz do nas na numer {NUMER_TEL_TEKST} i posłuchaj go na antenie.")
-            ],
-            [
-                ("glos", f"Witamy w Radiu Strefa Zero! Przed nami godzina pełna energii pod znakiem: {gatunek}."),
-                ("glos", f"Twoje radio, Twoja muzyka. Pamiętaj o darmowym numerze SMS: {NUMER_TEL_TEKST}.")
-            ],
-            [
-                ("glos", "Słuchasz najlepszego radia internetowego – Radia Strefa Zero!"),
-                ("glos", f"Sponsorem dzisiejszego pasma są dobre wibracje i mocne klubowe brzmienia. Pozdrawiaj bliskich pod numerem: {NUMER_TEL_TEKST}.")
-            ],
-            [
-                ("glos", "Gorące hity, taneczne bity i najlepsza atmosfera tylko w Radiu Strefa Zero!"),
-                ("glos", f"Napisz do nas SMS na numer {NUMER_TEL_TEKST} i powiedz, jaka piosenka ma zagrać dla Ciebie specjalnie.")
-            ]
+        elementy = [
+            ("glos", f"Radio Strefa Zero! W tej godzinie zapraszam na pasmo przy {gatunek}.")
         ]
-        return random.choice(warianty_poczatek)
+        if newsy_rmf:
+            elementy.append(("glos", newsy_rmf))
+            
+        elementy.append(("glos", f"Zamawiaj utwory i wysyłaj pozdrowienia na darmowy numer telefonu: {NUMER_TEL_TEKST}."))
+        return elementy
 
 
 def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
@@ -394,6 +404,7 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
+            # Sprawdzanie audycji na życzenie według Twoich nowych, dokładnych wytycznych
             dzien = teraz.weekday()
             godzina = teraz.hour
 
