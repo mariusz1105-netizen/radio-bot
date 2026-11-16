@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import paramiko
 import requests
-import feedparser
 import yt_dlp
 import asyncio
 import edge_tts
@@ -34,15 +33,20 @@ PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
-KONCERT_ZYCZEN_DNI = (4, 5)
+# Koncert życzeń: czwartki i piątki w godzinach 18:00 - 20:00
+KONCERT_ZYCZEN_DNI = (3, 4)  # 3=Czwartek, 4=Piątek
 KONCERT_ZYCZEN_START = 18
 KONCERT_ZYCZEN_KONIEC = 20
 
+# Piosenka na życzenie: od poniedziałku do piątku (co 3 godziny)
 PIOSENKA_NA_ZYCZENIE_DNI = (0, 1, 2, 3, 4)
-PIOSENKA_NA_ZYCZENIE_START = 17
-PIOSENKA_NA_ZYCZENIE_KONIEC = 18
+PIOSENKA_NA_ZYCZENIE_START = 8
+PIOSENKA_NA_ZYCZENIE_KONIEC = 22
 
-ODSTEP_EMISJI_SEKUNDY = 420
+# Odstęp emisji dla piosenek na życzenie (co 3 godziny = 10800 sekund)
+ODSTEP_EMISJI_SEKUNDY = 10800
+
+NUMER_TEL_TEKST = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
 
 def polacz_sftp():
@@ -58,7 +62,6 @@ def polacz_sftp():
 
 
 async def async_generuj_edge_tts(tekst, sciezka_docelowa):
-    # Używamy naturalnego kobiecego głosu Microsoftu (Zofia)
     communicate = edge_tts.Communicate(tekst, "pl-PL-ZofiaNeural")
     await communicate.save(sciezka_docelowa)
 
@@ -73,7 +76,6 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             temp_path = os.path.join(
                 FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}"
             )
-            
             asyncio.run(async_generuj_edge_tts(tekst, temp_path))
             if os.path.exists(temp_path):
                 pliki_tymczasowe.append(temp_path)
@@ -83,7 +85,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
             for temp_f in pliki_tymczasowe:
                 segment = AudioSegment.from_file(temp_f)
                 polaczony_segment += segment
-                polaczony_segment += AudioSegment.silent(duration=400)
+                polaczony_segment += AudioSegment.silent(duration=500)
             
             polaczony_segment.export(sciezka_koncowa, format="mp3")
             return sciezka_koncowa
@@ -97,48 +99,19 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego):
                 os.remove(temp_f)
 
 
-def miksuj_z_tlem_muzycznym(sciezka_mowy, sciezka_tla=None, wspolczynnik_sciszenia_db=-14):
-    try:
-        mowa = AudioSegment.from_file(sciezka_mowy)
-        if sciezka_tla and os.path.exists(sciezka_tla):
-            tlo = AudioSegment.from_file(sciezka_tla)
-            if len(tlo) < len(mowa):
-                tlo = tlo * (len(mowa) // len(tlo) + 1)
-            tlo = tlo[:len(mowa)]
-            tlo_przyciszone = tlo + wspolczynnik_sciszenia_db
-            zmiksowane = tlo_przyciszone.overlay(mowa)
-            zmiksowane.export(sciezka_mowy, format="mp3")
-    except Exception as e:
-        print(f"Błąd miksowania audio z tłem: {e}")
-    return sciezka_mowy
-
-
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
-    slowa_kluczowe = list()
-    for s in re.findall(r"\w+", zapytanie):
-        if len(s) > 2:
-            slowa_kluczowe.append(s.lower())
+    slowa_kluczowe = [s.lower() for s in re.findall(r"\w+", zapytanie) if len(s) > 2]
     if not slowa_kluczowe:
         return None
 
-    foldery_do_sprawdzenia = (
-        DIR_POBRANE,
-        "radio",
-        "italo disco",
-        "disco polo",
-        "muzyka mix",
-        "muzyka klubowa",
-        ".",
-    )
+    foldery_do_sprawdzenia = (DIR_POBRANE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
     for folder in foldery_do_sprawdzenia:
         try:
             pliki = sftp.listdir(folder)
             for plik in pliki:
                 if plik.lower().endswith(".mp3"):
                     nazwa_bez_rozsz = plik.lower()
-                    if all(
-                        slowo in nazwa_bez_rozsz for slowo in slowa_kluczowe
-                    ):
+                    if all(slowo in nazwa_bez_rozsz for slowo in slowa_kluczowe):
                         return f"{folder}/{plik}" if folder != "." else plik
         except Exception:
             continue
@@ -147,13 +120,11 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
 
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     sciezka_wyjsciowa = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
-    
     warianty_zapytan = [
         f"ytsearch1:{zapytanie} audio",
         f"ytsearch1:{zapytanie} piosenka",
         f"ytsearch1:{zapytanie}",
     ]
-    
     opcje_ytdlp = {
         "format": "bestaudio/best",
         "outtmpl": f"{sciezka_wyjsciowa}.%(ext)s",
@@ -165,11 +136,7 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }],
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
     }
-
     for query in warianty_zapytan:
         try:
             with yt_dlp.YoutubeDL(opcje_ytdlp) as ydl:
@@ -211,92 +178,55 @@ def zapisz_kolejke_sftp(sftp, lista_kolejki):
 def inteligentna_korekta(tekst):
     t = tekst.lower()
     slownik_poprawek = {
-        "zeby": "żeby",
-        "zyczenia": "życzenia",
-        "zycze": "życzę",
-        "zyczymy": "życzymy",
-        "pozdrowienia": "pozdrowienia",
-        "pozdro": "pozdrowienia",
-        "pozdrawiam": "pozdrawiam",
-        "dzien": "dzień",
-        "urodziny": "urodziny",
-        "urodzin": "urodzin",
-        "dziekuje": "dziękuję",
-        "dzieki": "dzięki",
-        "sie": "się",
-        "ze": "że",
-        "dzis": "dziś",
-        "tez": "też",
-        "wogole": "w ogóle",
-        "narazie": "na razie",
+        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
+        "pozdrowienia": "pozdrowienia", "pozdrawiam": "pozdrawiam", "dzien": "dzień",
+        "urodziny": "urodziny", "dziekuje": "dziękuję", "sie": "się", "ze": "że", "dzis": "dziś"
     }
-    poprawione = list()
-    for s in t.split():
-        poprawione.append(slownik_poprawek.get(s.strip(".,!?"), s))
+    poprawione = [slownik_poprawek.get(s.strip(".,!?"), s) for s in t.split()]
     return " ".join(poprawione)
 
 
 def daj_gatunek_na_godzine(godzina):
     if 18 <= godzina < 20:
         return "Wielkim Koncercie Życzeń"
-    elif 17 <= godzina < 18:
-        return "Piosence na Życzenie"
+    elif 8 <= godzina < 18:
+        return "Piosence na Życzenie oraz najlepszych hitach"
     elif 6 <= godzina < 14:
-        return "najlepszych rytmach Disco Polo"
+        return "najlepszych rytmach Disco Polo i dance"
     elif 14 <= godzina < 22:
-        return "najlepszym Italo Disco i Eurodance"
+        return "najlepszym Italo Disco, Eurodance oraz klubowych bitach"
     else:
-        return "klubowym miksie muzycznym"
+        return "nocnym, klubowym miksie muzycznym"
 
 
 def zbuduj_zapowiedz_godzinowa(docelowa_godzina_24h, faza="poczatek"):
     gatunek = daj_gatunek_na_godzine(docelowa_godzina_24h)
-    nr_tel = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
-
+    
     if faza == "srodek":
-        warianty_srodek = [
-            (
-                ("glos", "Halo, tu Radio Strefa Zero! Jesteśmy w połowie naszego pasma i cały czas gram dla Was."),
-                ("glos", f"Przypominam o darmowych wiadomościach z pozdrowieniami na numer: {nr_tel}. Bądźcie z nami.")
-            ),
-            (
-                ("glos", "Twoje ulubione Radio Strefa Zero gra bez przerwy!"),
-                ("glos", f"Chcesz kogoś pozdrowić? Wyślij darmową wiadomość na numer: {nr_tel} i zostań ze mną.")
-            ),
-            (
-                ("glos", "Mijają kolejne chwile z Radiem Strefa Zero."),
-                ("glos", f"Pamiętajcie o darmowych pozdrowieniach na numer: {nr_tel}. Miłego słuchania!")
-            )
+        return [
+            ("glos", "Słuchacie Radia Strefa Zero! Jesteśmy w stałym paśmie muzycznym."),
+            ("glos", f"Przypominam o naszym darmowym numerze SMS na pozdrowienia i zamówienia: {NUMER_TEL_TEKST}. Zostańcie z nami!")
         ]
-        return random.choice(warianty_srodek)
-
     elif faza == "koniec":
-        warianty_koniec = [
-            (
-                ("glos", "To już powoli koniec tego bloku w Radiu Strefa Zero. Dziękuję, że jesteście ze mną."),
-                ("glos", "Już niedługo kolejna porcja muzyki i następna fala dobrej zabawy. Do usłyszenia.")
-            ),
-            (
-                ("glos", "Powoli kończę tę godzinę w Radiu Strefa Zero."),
-                ("glos", "Zostajcie na naszej fali, bo za chwilę wracam z kolejnymi muzycznymi hitami.")
-            )
+        return [
+            ("glos", "To już finał tego bloku godzinowego w Radiu Strefa Zero."),
+            ("glos", f"Chcesz zadedykować piosenkę bliskiej osobie? Wyślij SMS na numer {NUMER_TEL_TEKST}. Za chwilę wracamy z muzyką!")
         ]
-        return random.choice(warianty_koniec)
-
     else:
+        # Propozycje nowych cyklicznych zapowiedzi i reklam stacji
         warianty_poczatek = [
-            (
-                ("glos", f"Radio Strefa Zero. Przez najbliższą godzinę zapraszam na spotkanie przy {gatunek}."),
-                ("glos", f"Zamawiajcie ulubione utwory i pozdrawiajcie bliskich na darmowy numer: {nr_tel}.")
-            ),
-            (
-                ("glos", f"Witajcie w Radiu Strefa Zero! W tej godzinie gram specjalnie dla Was w rytmie: {gatunek}."),
-                ("glos", f"Masz ochotę na pozdrowienia? Wyślij darmową wiadomość na numer: {nr_tel}.")
-            ),
-            (
-                ("glos", f"Czas na dobrą muzykę w Radiu Strefa Zero! Przed nami godzina pełna dźwięków pod znakiem: {gatunek}."),
-                ("glos", f"Pozdrawiajcie swoich bliskich przez darmowy numer: {nr_tel}. Miłej zabawy!")
-            )
+            [
+                ("glos", f"Radio Strefa Zero! W tej godzinie zapraszam na pasmo przy {gatunek}."),
+                ("glos", f"Zamawiaj utwory i wysyłaj pozdrowienia na darmowy numer telefonu: {NUMER_TEL_TEKST}.")
+            ],
+            [
+                ("glos", "Czas na wyjątkowy kącik wspomnień i muzyczną podróż w Radiu Strefa Zero!"),
+                ("glos", f"Masz ulubiony utwór z dawnych lat? Napisz do nas na numer {NUMER_TEL_TEKST} i posłuchaj go na antenie.")
+            ],
+            [
+                ("glos", f"Witamy w Radiu Strefa Zero! Przed nami godzina pełna energii pod znakiem: {gatunek}."),
+                ("glos", f"Twoje radio, Twoja muzyka. Pamiętaj o darmowym numerze SMS: {NUMER_TEL_TEKST}.")
+            ]
         ]
         return random.choice(warianty_poczatek)
 
@@ -313,12 +243,9 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         if "koncert" in t_low:
             typ_audycji = "koncert"
             czysta_tresc = re.sub(r"(?i)^koncert\s*życzeń[:\-\s]|^koncert\s*zyczen[:\-\s]", "", tresc_sms).strip()
-        elif "piosenka" in t_low or "muzyka" in t_low:
-            typ_audycji = "piosenka"
-            czysta_tresc = re.sub(r"(?i)^piosenka\s*na\s*życzenie[:\-\s]|^piosenka\s*na\s*zyczenie[:\-\s]", "", tresc_sms).strip()
         else:
             typ_audycji = "piosenka"
-            czysta_tresc = tresc_sms.strip()
+            czysta_tresc = re.sub(r"(?i)^piosenka\s*na\s*życzenie[:\-\s]|^piosenka\s*na\s*zyczenie[:\-\s]", "", tresc_sms).strip()
 
         imie_nadawcy = "Słuchacza"
         match_podpis = re.search(r"[-–—]\s*([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15})", czysta_tresc)
@@ -326,13 +253,12 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             imie_nadawcy = match_podpis.group(1).capitalize()
 
         zapytanie_muzyczne = re.sub(r"[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}", "", czysta_tresc).strip()
-        czy_zamowiono_piosenke = ((typ_audycji == "piosenka") or ("piosenk" in t_low) or ("zagraj" in t_low) or ("utwór" in t_low))
-
+        
         sciezka_piosenki_na_dysku = None
-        if czy_zamowiono_piosenke and len(zapytanie_muzyczne) > 2:
+        if len(zapytanie_muzyczne) > 2:
             sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
             if not sciezka_piosenki_na_dysku:
-                bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"{znacznik_czasu}"
+                bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie_muzyczne, bezpieczna_nazwa)
                 if lokalne_mp3 and os.path.exists(lokalne_mp3):
                     zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
@@ -342,18 +268,19 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
+        # Kolejność: Najpierw zapowiedź reklamy/zamówienia, podanie numeru tel, a potem muzyka
         if typ_audycji == "koncert":
-            kwestie_audio = (
-                ("glos", f"Mam wspaniałą wiadomość do naszego Koncertu Życzeń od {imie_nadawcy}."),
-                ("glos", f"Oto treść: {poprawiona_tresc}."),
-                ("glos", "Pozdrawiam najmocniej i gram dalej w Radiu Strefa Zero!"),
-            )
+            kwestie_audio = [
+                ("glos", f"Uwaga! Specjalne zgłoszenie do naszego Koncertu Życzeń przesłał {imie_nadawcy}."),
+                ("glos", f"Oto treść wiadomości: {poprawiona_tresc}."),
+                ("glos", f"Chcesz dołączyć do zabawy? Wyślij darmowy SMS na nasz numer: {NUMER_TEL_TEKST}. Gramy dalej w Radiu Strefa Zero!")
+            ]
         else:
-            kwestie_audio = (
-                ("glos", f"Super zgłoszenie w paśmie Piosenka na Życzenie od {imie_nadawcy}."),
-                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
-                ("glos", "Świetny wybór, lecimy z muzyką!"),
-            )
+            kwestie_audio = [
+                ("glos", f"Mamy nową Piosenkę na Życzenie od słuchacza: {imie_nadawcy}."),
+                ("glos", f"Treść pozdrowień: {poprawiona_tresc}."),
+                ("glos", f"Zamawiaj kolejne utwory pod darmowym numerem: {NUMER_TEL_TEKST}. Słuchaj Radia Strefa Zero!")
+            ]
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
         lokalny_glos = generuj_audio_mp3(kwestie_audio, nazwa_glosu)
@@ -391,74 +318,27 @@ def webhook_sms():
     return "<Response></Response>", 200
 
 
-@app.route("/generuj-godzine", methods=["GET"])
-def test_generuj_godzine():
-    try:
-        teraz = datetime.now(STREFA_EUROPA)
-        docelowa_godzina = teraz.hour
-        nazwa_pliku = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-        
-        sciezka = generuj_audio_mp3(
-            zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku
-        )
-        
-        if sciezka and os.path.exists(sciezka):
-            transport, sftp = polacz_sftp()
-            try:
-                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
-            finally:
-                sftp.close()
-                transport.close()
-            os.remove(sciezka)
-            return f"Sukces! Wygenerowano i wysłano zapowiedź: {nazwa_pliku}", 200
-        return "Błąd generowania pliku audio przez Edge TTS", 500
-    except Exception as e:
-        return f"Błąd endpointu: {e}", 500
-
-
 def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
     ostatnia_e_timestamp = 0
     ostatnia_generowana_faza = ""
-    ostatnie_czyszczenie_ts = 0
 
     while True:
         try:
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            if obecny_ts - ostatnie_czyszczenie_ts > 1800:
-                transport, sftp = polacz_sftp()
-                try:
-                    for plik in sftp.listdir(DIR_JINGLES):
-                        if plik.endswith(".mp3"):
-                            sciezka_pliku = f"{DIR_JINGLES}/{plik}"
-                            try:
-                                attr = sftp.stat(sciezka_pliku)
-                                czas_modyfikacji = attr.st_mtime
-                                if obecny_ts - czas_modyfikacji > 7200:
-                                    sftp.remove(sciezka_pliku)
-                            except Exception:
-                                pass
-                except Exception as e:
-                    print(f"Błąd podczas czyszczenia starych plików: {e}")
-                finally:
-                    sftp.close()
-                    transport.close()
-                    ostatnie_czyszczenie_ts = obecny_ts
-
             czas_przyszly = teraz + timedelta(minutes=10)
             docelowa_godzina = czas_przyszly.hour
             minuta_teraz = teraz.minute
             godzina_teraz = teraz.hour
 
+            # Generowanie zapowiedzi o pełnych godzinach
             if czas_przyszly.minute <= 3 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
                     nazwa_pliku = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
-                    sciezka = generuj_audio_mp3(
-                        zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku
-                    )
+                    sciezka = generuj_audio_mp3(zbuduj_zapowiedz_godzinowa(docelowa_godzina, faza="poczatek"), nazwa_pliku)
                     if sciezka and os.path.exists(sciezka):
                         sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
                         os.remove(sciezka)
@@ -467,14 +347,13 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
 
+            # Wstawki w połowie godziny (minuta 30)
             faza_klucz_srodek = f"{godzina_teraz}_30"
             if minuta_teraz == 30 and ostatnia_generowana_faza != faza_klucz_srodek:
                 transport, sftp = polacz_sftp()
                 try:
                     nazwa_pliku_srodek = f"srodek_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                    sciezka_srodek = generuj_audio_mp3(
-                        zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="srodek"), nazwa_pliku_srodek
-                    )
+                    sciezka_srodek = generuj_audio_mp3(zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="srodek"), nazwa_pliku_srodek)
                     if sciezka_srodek and os.path.exists(sciezka_srodek):
                         sftp.put(sciezka_srodek, f"{DIR_JINGLES}/{nazwa_pliku_srodek}")
                         os.remove(sciezka_srodek)
@@ -483,22 +362,7 @@ def petla_zegara_i_emisji():
                     transport.close()
                 ostatnia_generowana_faza = faza_klucz_srodek
 
-            faza_klucz_koniec = f"{godzina_teraz}_50"
-            if minuta_teraz == 50 and ostatnia_generowana_faza != faza_klucz_koniec:
-                transport, sftp = polacz_sftp()
-                try:
-                    nazwa_pliku_koniec = f"koniec_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                    sciezka_koniec = generuj_audio_mp3(
-                        zbuduj_zapowiedz_godzinowa(godzina_teraz, faza="koniec"), nazwa_pliku_koniec
-                    )
-                    if sciezka_koniec and os.path.exists(sciezka_koniec):
-                        sftp.put(sciezka_koniec, f"{DIR_JINGLES}/{nazwa_pliku_koniec}")
-                        os.remove(sciezka_koniec)
-                finally:
-                    sftp.close()
-                    transport.close()
-                ostatnia_generowana_faza = faza_klucz_koniec
-
+            # Sprawdzanie audycji na życzenie (Koncert / Piosenka na życzenie) z zachowaniem odstępu
             dzien = teraz.weekday()
             godzina = teraz.hour
 
@@ -536,7 +400,10 @@ def petla_zegara_i_emisji():
         time.sleep(15)
 
 
-if __name__ == "__main__":
+# AUTOMATYCZNY START WĄTKU (działa również poprawnie przy starcie aplikacji)
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("RENDER") or True:
     watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
     watek_tlo.start()
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
