@@ -29,6 +29,11 @@ SFTP_PASS = os.environ.get("SFTP_PASS", "")
 DIR_JINGLES = "jingles"
 DIR_MAGAZYN = "magazyn_zyczen"
 DIR_POBRANE = "pobrane_od_sluchaczy"
+DIR_GODZINA = "godzina"
+DIR_NEWS = "news"
+DIR_KONCERT_ZYCZEN = "Koncert zyczen"
+DIR_PIOSENKA_NA_ZYCZENIE = "piosenka na zyczenie"
+DIR_PIOSENKI_DLA_SLUCHACZY = "piosenki dla sluchaczy"
 
 PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
 
@@ -44,9 +49,9 @@ PIOSENKA_NA_ZYCZENIE_DNI = (4, 5, 6)
 PIOSENKA_NA_ZYCZENIE_START = 17
 PIOSENKA_NA_ZYCZENIE_KONIEC = 21
 
-# Serwis informacyjny z RMF FM: Każdy dzień (poniedziałek - niedziela), od 6:00 do 16:00
+# Serwis informacyjny z RMF FM: Każdy dzień (poniedziałek - niedziela), od 7:00 do 16:00
 INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
-INFO_RMF_START = 6
+INFO_RMF_START = 7
 INFO_RMF_KONIEC = 16
 
 # Odstęp emisji dla piosenek na życzenie (co 1 godzinę / 3600 sekund)
@@ -59,7 +64,7 @@ def polacz_sftp():
     transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
     transport.connect(username=SFTP_USER, password=SFTP_PASS)
     sftp = paramiko.SFTPClient.from_transport(transport)
-    for folder in (DIR_JINGLES, DIR_MAGAZYN, DIR_POBRANE):
+    for folder in (DIR_JINGLES, DIR_MAGAZYN, DIR_POBRANE, DIR_GODZINA, DIR_NEWS, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_PIOSENKI_DLA_SLUCHACZY):
         try:
             sftp.stat(folder)
         except IOError:
@@ -129,7 +134,7 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     if not slowa_kluczowe:
         return None
 
-    foldery_do_sprawdzenia = (DIR_POBRANE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
+    foldery_do_sprawdzenia = (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
     for folder in foldery_do_sprawdzenia:
         try:
             pliki = sftp.listdir(folder)
@@ -148,8 +153,9 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     
     warianty_zapytan = [
         f"ytsearch1:{zapytanie} audio",
+        f"ytsearch1:{zapytanie} hq",
         f"ytsearch1:{zapytanie} piosenka",
-        f"ytsearch1:{zapytanie}",
+        f"ytsearch1:{zapytanie}"
     ]
     
     opcje_ytdlp = {
@@ -214,8 +220,7 @@ def inteligentna_korekta(tekst):
         "dzien": "dzień", "urodziny": "urodziny", "imieniny": "imieniny", "dziekuje": "dziękuję",
         "dzieki": "dzięki", "sie": "się", "ze": "że", "dzis": "dziś", "tez": "też",
         "wogole": "w ogóle", "narazie": "na razie", "najlepszego": "najlepszego",
-        "caluski": "całuski", "pozdrowionka": "pozdrowionka", "muzyczka": "muzyczka",
-        "piosenka": "piosenka", "utworek": "utworek", "graj": "graj", "zagraj": "zagraj"
+        "caluski": "całuski", "pozdrowionka": "pozdrowionka", "muzyczka": "muzyczka"
     }
     poprawione = [slownik_poprawek.get(s.strip(".,!?"), s) for s in t.split()]
     return " ".join(poprawione)
@@ -259,10 +264,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         if "koncert" in t_low:
             typ_audycji = "koncert"
+            folder_docelowy = DIR_KONCERT_ZYCZEN
         else:
             typ_audycji = "piosenka"
+            folder_docelowy = DIR_PIOSENKA_NA_ZYCZENIE
 
-        # Czyszczenie ze zwrotów instrukcyjnych
         czysta_tresc = tresc_sms
         wzorce_do_wyciecia = [
             r"(?i)^koncert\s*życzeń[:\-\s]*",
@@ -285,6 +291,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         zapytanie_muzyczne = re.sub(r"[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}", "", czysta_tresc).strip()
         
+        # Pobieramy lub szukamy piosenki i zapisujemy na stałe w folderze docelowym audycji
         sciezka_piosenki_na_dysku = None
         if len(zapytanie_muzyczne) > 2:
             sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
@@ -292,43 +299,35 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie_muzyczne, bezpieczna_nazwa)
                 if lokalne_mp3 and os.path.exists(lokalne_mp3):
-                    zdalna_piosenka = f"{DIR_POBRANE}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalny_mp3, zdalna_piosenka)
+                    zdalna_piosenka = f"{folder_docelowy}/{bezpieczna_nazwa}.mp3"
+                    sftp.put(lokalne_mp3, zdalna_piosenka) # Zapis na stałe!
                     sciezka_piosenki_na_dysku = zdalna_piosenka
-                    os.remove(lokalny_mp3)
+                    os.remove(lokalne_mp3)
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
 
         if typ_audycji == "koncert":
             kwestie_audio = [
-                ("glos", f"Mamy nowe zgłoszenie do Koncertu Życzeń od słuchacza: {imie_nadawcy}."),
-                ("glos", f"Treść wiadomości: {poprawiona_tresc}."),
-                ("glos", f"Chcesz dołączyć do zabawy? Wyślij darmowy SMS na nasz numer: {NUMER_TEL_TEKST}. Gramy dalej w Radiu Strefa Zero!")
+                ("glos", f"Mamy zgłoszenie do Koncertu Życzeń od słuchacza: {imie_nadawcy}."),
+                ("glos", f"Treść: {poprawiona_tresc}."),
+                ("glos", f"Wyślij SMS na numer: {NUMER_TEL_TEKST}. Gramy w Radiu Strefa Zero!")
             ]
         else:
             kwestie_audio = [
-                ("glos", f"Nowa Piosenka na Życzenie od: {imie_nadawcy}."),
+                ("glos", f"Piosenka na Życzenie od: {imie_nadawcy}."),
                 ("glos", f"Pozdrowienia: {poprawiona_tresc}."),
-                ("glos", f"Zamawiaj kolejne utwory pod darmowym numerem: {NUMER_TEL_TEKST}. Słuchaj Radia Strefa Zero!")
+                ("glos", f"Zamawiaj pod numerem: {NUMER_TEL_TEKST}. Radio Strefa Zero!")
             ]
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
         lokalny_glos = generuj_audio_mp3(kwestie_audio, nazwa_glosu)
         
         if lokalny_glos and os.path.exists(lokalny_glos):
-            zdalny_glos = f"{DIR_MAGAZYN}/{nazwa_glosu}"
-            sftp.put(lokalny_glos, zdalny_glos)
+            zdalny_glos = f"{folder_docelowy}/{nazwa_glosu}"
+            sftp.put(lokalny_glos, zdalny_glos) # Zapowiedź też na stałe do folderu audycji
             os.remove(lokalny_glos)
 
-        kolejka = wczytaj_kolejke_sftp(sftp)
-        nowy_wpis = dict(
-            audycja=typ_audycji,
-            czas_zgloszenia=time.time(),
-            plik_glos=zdalny_glos,
-            plik_piosenka=sciezka_piosenki_na_dysku,
-        )
-        kolejka.append(nowy_wpis)
-        zapisz_kolejke_sftp(sftp, kolejka)
+        print(f"Dodano zamówienie słuchacza na stałe do folderu: {folder_docelowy}")
     except Exception as e:
         print(f"Blad przetwarzania SMS w tle: {e}")
     finally:
@@ -360,12 +359,12 @@ def test_generuj_godzine():
         if sciezka and os.path.exists(sciezka):
             transport, sftp = polacz_sftp()
             try:
-                sftp.put(sciezka, f"{DIR_JINGLES}/{nazwa_pliku}")
+                sftp.put(sciezka, f"{DIR_GODZINA}/{nazwa_pliku}")
             finally:
                 sftp.close()
                 transport.close()
             os.remove(sciezka)
-            return f"Sukces! Wygenerowano i wysłano zapowiedź godziny: {nazwa_pliku}", 200
+            return f"Sukces! Wygenerowano i wysłano zapowiedź godziny do folderu 'godzina': {nazwa_pliku}", 200
         return "Błąd generowania pliku audio przez Edge TTS", 500
     except Exception as e:
         return f"Błąd endpointu: {e}", 500
@@ -373,7 +372,6 @@ def test_generuj_godzine():
 
 def petla_zegara_i_emisji():
     ostatnia_zapowiedziana_godzina = -1
-    ostatnia_e_timestamp = 0
     ostatnie_czyszczenie_ts = 0
 
     while True:
@@ -381,19 +379,21 @@ def petla_zegara_i_emisji():
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            # Czyszczenie starych plików z jingles (starsze niż 2 godziny)
+            # 1. Czyszczenie TYLKO starych plików tymczasowych z folderów "godzina" i "news" (> 2 godziny)
+            # Piosenki zamówione przez słuchaczy i muzyka w folderach docelowych NIE SĄ KASOWANE (zostają na stałe).
             if obecny_ts - ostatnie_czyszczenie_ts > 1800:
                 transport, sftp = polacz_sftp()
                 try:
-                    for plik in sftp.listdir(DIR_JINGLES):
-                        if plik.endswith(".mp3"):
-                            sciezka_pliku = f"{DIR_JINGLES}/{plik}"
-                            try:
-                                attr = sftp.stat(sciezka_pliku)
-                                if obecny_ts - attr.st_mtime > 7200:
-                                    sftp.remove(sciezka_pliku)
-                            except Exception:
-                                pass
+                    for folder_tymczasowy in (DIR_GODZINA, DIR_NEWS):
+                        for plik in sftp.listdir(folder_tymczasowy):
+                            if plik.endswith(".mp3"):
+                                sciezka_pliku = f"{folder_tymczasowy}/{plik}"
+                                try:
+                                    attr = sftp.stat(sciezka_pliku)
+                                    if obecny_ts - attr.st_mtime > 7200:
+                                        sftp.remove(sciezka_pliku)
+                                except Exception:
+                                    pass
                 except Exception as e:
                     print(f"Błąd czyszczenia starych plików: {e}")
                 finally:
@@ -401,87 +401,34 @@ def petla_zegara_i_emisji():
                     transport.close()
                     ostatnie_czyszczenie_ts = obecny_ts
 
-            # Generowanie zapowiedzi godziny oraz info z 20-minutowym wyprzedzeniem
-            czas_przyszly = teraz + timedelta(minutes=20)
-            docelowa_godzina = czas_przyszly.hour
-
-            if czas_przyszly.minute <= 2 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
+            # 2. Generowanie zapowiedzi godziny oraz newsów RMF punktualnie na pełną godzinę
+            docelowa_godzina = teraz.hour
+            if teraz.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
-                    nazwa_pliku_godzina = f"godzina_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
+                    # Zapowiedź godziny trafia do folderu "godzina"
+                    nazwa_pliku_godzina = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka_g = generuj_audio_mp3(zbuduj_tylko_godzine(docelowa_godzina), nazwa_pliku_godzina)
                     if sciezka_g and os.path.exists(sciezka_g):
-                        sftp.put(sciezka_g, f"{DIR_JINGLES}/{nazwa_pliku_godzina}")
+                        sftp.put(sciezka_g, f"{DIR_GODZINA}/{nazwa_pliku_godzina}")
                         os.remove(sciezka_g)
-                        print(f"Wysłano plik godziny: {nazwa_pliku_godzina}")
+                        print(f"Wysłano plik godziny do folderu 'godzina': {nazwa_pliku_godzina}")
 
+                    # Newsy z RMF trafiają do folderu "news" (aktywne od 7 do 16)
                     if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
                         kwestie_info = zbuduj_informacje_rmf()
                         if kwestie_info:
-                            nazwa_pliku_info = f"info_{czas_przyszly.strftime('%Y%m%d_%H%M%S')}.mp3"
+                            nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
                             sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info)
                             if sciezka_i and os.path.exists(sciezka_i):
-                                sftp.put(sciezka_i, f"{DIR_JINGLES}/{nazwa_pliku_info}")
+                                sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
                                 os.remove(sciezka_i)
-                                print(f"Wysłano plik info: {nazwa_pliku_info}")
+                                print(f"Wysłano plik info do folderu 'news': {nazwa_pliku_info}")
                 finally:
                     sftp.close()
                     transport.close()
                 
                 ostatnia_zapowiedziana_godzina = docelowa_godzina
-
-            # Sprawdzanie audycji na życzenie według harmonogramu
-            dzien = teraz.weekday()
-            godzina = teraz.hour
-
-            if dzien in KONCERT_ZYCZEN_DNI and KONCERT_ZYCZEN_START <= godzina < KONCERT_ZYCZEN_KONIEC:
-                aktywna_audycja = "koncert"
-            elif dzien in PIOSENKA_NA_ZYCZENIE_DNI and PIOSENKA_NA_ZYCZENIE_START <= godzina < PIOSENKA_NA_ZYCZENIE_KONIEC:
-                aktywna_audycja = "piosenka"
-            else:
-                aktywna_audycja = None
-
-            if aktywna_audycja and (obecny_ts - ostatnia_e_timestamp >= ODSTEP_EMISJI_SEKUNDY):
-                transport, sftp = polacz_sftp()
-                try:
-                    kolejka = wczytaj_kolejke_sftp(sftp)
-                    paczka = next((el for el in kolejka if el.get("audycja") == aktywna_audycja), None)
-                    if paczka:
-                        lokalny_glos = os.path.join(FOLDER_ROBOCZY, "temp_glos.mp3")
-                        lokalny_utwor = os.path.join(FOLDER_ROBOCZY, "temp_utwor.mp3")
-                        lokalna_wspolna = os.path.join(FOLDER_ROBOCZY, f"emisja_razem_{int(obecny_ts)}.mp3")
-                        
-                        try:
-                            # Pobieramy plik z głosem lektora z SFTP
-                            sftp.get(paczka.get("plik_glos"), lokalny_glos)
-                            audio_calosc = AudioSegment.from_file(lokalny_glos)
-                            
-                            # Sklejamy z piosenką (jeden nierozerwalny plik mp3)
-                            if paczka.get("plik_piosenka"):
-                                sftp.get(paczka.get("plik_piosenka"), lokalny_utwor)
-                                audio_utwor = AudioSegment.from_file(lokalny_utwor)
-                                audio_calosc += AudioSegment.silent(duration=500) + audio_utwor
-                            
-                            audio_calosc.export(lokalna_wspolna, format="mp3")
-                            
-                            # Wysyłamy jeden gotowy plik do jingles
-                            nazwa_docelowa = f"duet_{int(obecny_ts)}.mp3"
-                            sftp.put(lokalna_wspolna, f"{DIR_JINGLES}/{nazwa_docelowa}")
-                            print(f"Wyemitowano połączony plik życzeń: {nazwa_docelowa}")
-                            
-                        except Exception as inner_e:
-                            print(f"Błąd sklejania audio do emisji: {inner_e}")
-                        finally:
-                            for f_temp in [lokalny_glos, lokalny_utwor, lokalna_wspolna]:
-                                if os.path.exists(f_temp):
-                                    os.remove(f_temp)
-
-                        kolejka.remove(paczka)
-                        zapisz_kolejke_sftp(sftp, kolejka)
-                        ostatnia_e_timestamp = obecny_ts
-                finally:
-                    sftp.close()
-                    transport.close()
 
         except Exception as e:
             print(f"Błąd w pętli głównej zegara: {e}")
@@ -489,9 +436,10 @@ def petla_zegara_i_emisji():
         time.sleep(15)
 
 
-if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("RENDER") or True:
-    watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-    watek_tlo.start()
+# Automatyczny start wątku w tle przy uruchomieniu aplikacji przez Gunicorn / Flask
+watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+watek_tlo.start()
+print(">>> Wątek automatyczny radia (zegar, pliki i emisja) został uruchomiony! <<<")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
