@@ -40,6 +40,9 @@ DIR_KONCERT_ZYCZEN = "Koncert zyczen"
 DIR_PIOSENKA_NA_ZYCZENIE = "piosenka na zyczenie"
 DIR_PIOSENKI_DLA_SLUCHACZY = "piosenki dla sluchaczy"
 
+# Foldery gatunkowe muzyki na serwerze (folder 'radio' jest nienaruszalny przez automaty)
+FOLDERY_GATUNKOWE = ["disco polo", "disco polo dance", "muzyka klubowa", "italo disco", "muzyka mix"]
+
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
@@ -53,7 +56,7 @@ def polacz_sftp():
     transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
     transport.connect(username=SFTP_USER, password=SFTP_PASS)
     sftp = paramiko.SFTPClient.from_transport(transport)
-    for folder in (DIR_JINGLES, DIR_MAGAZYN, DIR_POBRANE, DIR_GODZINA, DIR_NEWS, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_PIOSENKI_DLA_SLUCHACZY):
+    for folder in (DIR_JINGLES, DIR_MAGAZYN, DIR_POBRANE, DIR_GODZINA, DIR_NEWS, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_PIOSENKI_DLA_SLUCHACZY) + tuple(FOLDERY_GATUNKOWE):
         try:
             sftp.stat(folder)
         except IOError:
@@ -118,12 +121,26 @@ def pobierz_aktualne_newsy_rmf():
     return ""
 
 
+def okresl_folder_gatunkowy(zapytanie):
+    t = zapytanie.lower()
+    if "club" in t or "klub" in t or "house" in t or "techno" in t or "edm" in t:
+        return "muzyka klubowa"
+    elif "italo" in t or "retro" in t or "80" in t:
+        return "italo disco"
+    elif "dance" in t:
+        return "disco polo dance"
+    elif "disco" in t or "polo" in t or "akcent" in t or "milano" in t:
+        return "disco polo"
+    else:
+        return "muzyka mix"
+
+
 def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     slowa_kluczowe = [s.lower() for s in re.findall(r"\w+", zapytanie) if len(s) > 2]
     if not slowa_kluczowe:
         return None
 
-    foldery_do_sprawdzenia = (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_JINGLES, "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
+    foldery_do_sprawdzenia = tuple(FOLDERY_GATUNKOWE) + (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_JINGLES, ".")
     for folder in foldery_do_sprawdzenia:
         try:
             pliki = sftp.listdir(folder)
@@ -254,16 +271,15 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
 
         zapytanie_muzyczne = re.sub(r"[-–—]\s*[A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż]{2,15}", "", czysta_tresc).strip()
         
-        sciezka_piosenki_na_dysku = None
         if len(zapytanie_muzyczne) > 2:
-            sciezka_piosenki_na_dysku = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
-            if not sciezka_piosenki_na_dysku:
+            sciezka_istniejaca = szukaj_piosenki_na_dysku_sftp(sftp, zapytanie_muzyczne)
+            if not sciezka_istniejaca:
                 bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_\-]", "", zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(zapytanie_muzyczne, bezpieczna_nazwa)
                 if lokalne_mp3 and os.path.exists(lokalne_mp3):
-                    zdalna_piosenka = f"{folder_docelowy}/{bezpieczna_nazwa}.mp3"
+                    folder_gatunek = okresl_folder_gatunkowy(zapytanie_muzyczne)
+                    zdalna_piosenka = f"{folder_gatunek}/{bezpieczna_nazwa}.mp3"
                     sftp.put(lokalne_mp3, zdalna_piosenka)
-                    sciezka_piosenki_na_dysku = zdalna_piosenka
                     os.remove(lokalne_mp3)
 
         poprawiona_tresc = inteligentna_korekta(czysta_tresc)
@@ -365,7 +381,7 @@ SZABLON_JINGLES = """
         </div>
         
         <form id="generatorForm">
-            <label>Tekst zapowiedzi / dżingla:</label>
+            <label>Tekst zapowiedzi / dżingla / bloku:</label>
             <textarea name="text" rows="4" placeholder="Np. Słuchasz Radio Bit FM! Przed Tobą najlepsze hity klubowe!"></textarea>
             
             <label>📂 Wybierz folder docelowy na serwerze (AzuraCast):</label>
@@ -535,7 +551,6 @@ def endpoint_generuj_jingle_ai():
     selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
     target_folder = request.form.get("target_folder", "jingles")
     
-    # Walidacja folderu docelowego (zabezpieczenie przed wpisaniem czegokolwiek)
     dopuszczalne_foldery = {
         "jingles": DIR_JINGLES,
         "Koncert zyczen": DIR_KONCERT_ZYCZEN,
@@ -561,7 +576,7 @@ def endpoint_generuj_jingle_ai():
         rate_str = "+0%"
 
     if not text:
-        return jsonify({"status": "error", "message": "Tekst dżingla jest pusty!"}), 400
+        return jsonify({"status": "error", "message": "Tekst jest pusty!"}), 400
 
     znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
     nazwa_pliku = f"item_{znacznik}.mp3"
@@ -623,7 +638,7 @@ def index_glowna():
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
     <p>System automatyzacji radia, zegara i zamówień SMS działa prawidłowo.</p>
     <ul>
-        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI i Zapowiedzi</b></a></li>
+        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Zapowiedzi i Audycji</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny</a></li>
     </ul>
     """
@@ -638,30 +653,39 @@ def petla_zegara_i_emisji():
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
 
-            if obecny_ts - ostatnie_czyszczenie_ts > 1800:
+            # 1. Automatyczne czyszczenie plików z folderów życzeń i koncertu po 2 godzinach od utworzenia/emisji
+            if obecny_ts - ostatnie_czyszczenie_ts > 300: # sprawdza co 5 minut
                 transport, sftp = polacz_sftp()
                 try:
-                    for folder_tymczasowy in (DIR_GODZINA, DIR_NEWS):
-                        for plik in sftp.listdir(folder_tymczasowy):
-                            if plik.endswith(".mp3"):
-                                sciezka_pliku = f"{folder_tymczasowy}/{plik}"
-                                try:
-                                    attr = sftp.stat(sciezka_pliku)
-                                    if obecny_ts - attr.st_mtime > 7200:
-                                        sftp.remove(sciezka_pliku)
-                                except Exception:
-                                    pass
+                    foldery_do_czyszczenia = (DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_GODZINA, DIR_NEWS)
+                    for folder_t in foldery_do_czyszczenia:
+                        try:
+                            for plik in sftp.listdir(folder_t):
+                                if plik.endswith(".mp3"):
+                                    sciezka_pliku = f"{folder_t}/{plik}"
+                                    try:
+                                        attr = sftp.stat(sciezka_pliku)
+                                        # Usuwanie plików starszych niż 2 godziny (7200 sekund)
+                                        if obecny_ts - attr.st_mtime > 7200:
+                                            sftp.remove(sciezka_pliku)
+                                            print(f"Usunięto przestarzały plik z serwera: {sciezka_pliku}")
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
                 except Exception as e:
-                    print(f"Błąd czyszczenia starych plików: {e}")
+                    print(f"Błąd czyszczenia plików: {e}")
                 finally:
                     sftp.close()
                     transport.close()
-                    ostatnie_czyszczenie_ts = obecny_ts
+                ostatnie_czyszczenie_ts = obecny_ts
 
+            # 2. Automatyzacja pełnej godziny i newsów o pełnej godzinie
             docelowa_godzina = teraz.hour
             if teraz.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
                 transport, sftp = polacz_sftp()
                 try:
+                    # Zapowiedź godziny
                     nazwa_pliku_godzina = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
                     sciezka_g = generuj_audio_mp3(zbuduj_tylko_godzine(docelowa_godzina), nazwa_pliku_godzina)
                     if sciezka_g and os.path.exists(sciezka_g):
@@ -669,7 +693,8 @@ def petla_zegara_i_emisji():
                         os.remove(sciezka_g)
                         print(f"Wysłano plik godziny do folderu 'godzina': {nazwa_pliku_godzina}")
 
-                    if INFO_RMF_START <= docelowa_godzina < INFO_RMN_KONIEC if 'INFO_RMN_KONIEC' in globals() else INFO_RMF_KONIEC:
+                    # Serwis informacyjny RMF FM
+                    if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
                         kwestie_info = zbuduj_informacje_rmf()
                         if kwestie_info:
                             nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
@@ -678,6 +703,20 @@ def petla_zegara_i_emisji():
                                 sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
                                 os.remove(sciezka_i)
                                 print(f"Wysłano plik info do folderu 'news': {nazwa_pliku_info}")
+
+                    # Zapowiedź Koncertu Życzeń (Codziennie o 17:00)
+                    if docelowa_godzina == 17:
+                        kwestie_koncert = [
+                            ("glos", "Trwa codzienne pasmo Koncertu Życzeń w Radiu Strefa Zero!"),
+                            ("glos", f"Zamawiaj piosenki i wysyłaj pozdrowienia darmowym SMS-em na numer: {NUMER_TEL_TEKST}. Gramy dla Was!")
+                        ]
+                        nazwa_pliku_k = f"koncert_zapowiedz_{teraz.strftime('%Y%m%d')}.mp3"
+                        sciezka_k = generuj_audio_mp3(kwestie_koncert, nazwa_pliku_k)
+                        if sciezka_k and os.path.exists(sciezka_k):
+                            sftp.put(sciezka_k, f"{DIR_KONCERT_ZYCZEN}/{nazwa_pliku_k}")
+                            os.remove(sciezka_k)
+                            print(f"Wysłano zapowiedź Koncertu Życzeń do folderu 'Koncert zyczen': {nazwa_pliku_k}")
+
                 finally:
                     sftp.close()
                     transport.close()
