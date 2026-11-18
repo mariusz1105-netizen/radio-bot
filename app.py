@@ -15,13 +15,12 @@ import asyncio
 import edge_tts
 from pydub import AudioSegment
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 FOLDER_ROBOCZY = "roboczy_radio"
 if not os.path.exists(FOLDER_ROBOCZY):
     os.makedirs(FOLDER_ROBOCZY)
 
-# Foldery lokalne dla generatora dżingli
 DIR_STATIC_MUSIC = "static/music"
 DIR_STATIC_OUTPUT = "static/output"
 os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
@@ -75,12 +74,12 @@ def polacz_sftp():
     return transport, sftp
 
 
-async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-ZofiaNeural"):
+async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural"):
     communicate = edge_tts.Communicate(tekst, glos)
     await communicate.save(sciezka_docelowa)
 
 
-def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-ZofiaNeural"):
+def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeural"):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = list()
     try:
@@ -374,7 +373,7 @@ SZABLON_JINGLES = """
     <div class="container">
         <a href="/" class="back-link">← Powrót do głównej / Status</a>
         <h2>🎛️ Radio Strefa Zero - Generator Dżingli AI</h2>
-        <p style="color: #aaa; font-size: 14px;">Wpisz tekst dżingla, opcjonalnie wybierz podkład muzyczny. Gotowy plik wyślemy bezpośrednio na serwer do folderu <b>jingles</b>!</p>
+        <p style="color: #aaa; font-size: 14px;">Wpisz tekst dżingla, wybierz lektora z listy i opcjonalnie dodaj podkład muzyczny!</p>
         
         <form id="generatorForm">
             <label>Tekst dżingla:</label>
@@ -382,8 +381,18 @@ SZABLON_JINGLES = """
             
             <label>Wybierz głos lektora:</label>
             <select name="voice">
-                <option value="pl-PL-ZofiaNeural">Zofia (Kobiecy - Naturalny)</option>
-                <option value="pl-PL-MarekNeural">Marek (Męski - Radiowy)</option>
+                <optgroup label="Głosy Męskie (Radiowe)">
+                    <option value="pl-PL-MarekNeural">Marek (Głęboki, radiowy)</option>
+                    <option value="pl-PL-AndrzejNeural">Andrzej (Naturalny, dynamiczny)</option>
+                    <option value="pl-PL-JacekNeural">Jacek (Mocny, wyraźny)</option>
+                    <option value="pl-PL-TomaszNeural">Tomasz (Spokojny, ciepły)</option>
+                </optgroup>
+                <optgroup label="Głosy Żeńskie">
+                    <option value="pl-PL-ZofiaNeural">Zofia (Naturalny, elegancki)</option>
+                    <option value="pl-PL-AgnieszkaNeural">Agnieszka (Ciepły, radiowy)</option>
+                    <option value="pl-PL-EwaNeural">Ewa (Wyrazisty)</option>
+                    <option value="pl-PL-MagdalenaNeural">Magdalena (Miękki)</option>
+                </optgroup>
             </select>
 
             <div class="checkbox-group">
@@ -473,7 +482,7 @@ def endpoint_generuj_jingle_ai():
     text = request.form.get("text", "").strip()
     selected_music = request.form.get("music")
     add_music = request.form.get("add_music") == "on"
-    selected_voice = request.form.get("voice", "pl-PL-ZofiaNeural")
+    selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
 
     if not text:
         return jsonify({"status": "error", "message": "Tekst dżingla jest pusty!"}), 400
@@ -482,135 +491,4 @@ def endpoint_generuj_jingle_ai():
     nazwa_pliku = f"jingle_{znacznik}.mp3"
     
     speech_file = os.path.join(FOLDER_ROBOCZY, f"speech_{znacznik}.mp3")
-    final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
-
-    try:
-        # 1. Generowanie mowy przez Edge TTS
-        asyncio.run(async_generuj_edge_tts(text, speech_file, selected_voice))
-        
-        if not os.path.exists(speech_file):
-            return jsonify({"status": "error", "message": "Nie udało się wygenerować mowy przez Edge TTS."}), 500
-
-        # 2. Miksowanie z muzyką (jeśli zaznaczono)
-        if add_music and selected_music:
-            music_path = os.path.join(DIR_STATIC_MUSIC, selected_music)
-            if os.path.exists(music_path):
-                speech = AudioSegment.from_file(speech_file)
-                music = AudioSegment.from_file(music_path)
-                
-                target_duration = len(speech) + 2000
-                if len(music) > target_duration:
-                    music = music[:target_duration]
-                
-                # Ściszenie podkładu w tle (ducking) o 18 dB
-                music = music - 18
-                
-                # Nałożenie głosu na podkład (z opóźnieniem 500ms)
-                combined = music.overlay(speech, position=500)
-                combined.export(final_output, format="mp3")
-            else:
-                os.replace(speech_file, final_output)
-        else:
-            os.replace(speech_file, final_output)
-
-        # 3. Automatyczna wysyłka pliku na SFTP do folderu jingles
-        transport, sftp = polacz_sftp()
-        try:
-            zdalna_sciezka = f"{DIR_JINGLES}/{nazwa_pliku}"
-            sftp.put(final_output, zdalna_sciezka)
-            print(f"Wysłano nowy dżingle AI na serwer: {zdalna_sciezka}")
-        finally:
-            sftp.close()
-            transport.close()
-
-        return jsonify({
-            "status": "success", 
-            "file_url": f"/static/output/{nazwa_pliku}"
-        })
-
-    except Exception as e:
-        print(f"Błąd generatora dżingli: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/")
-def index_glowna():
-    return """
-    <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>System automatyzacji radia, zegara i zamówień SMS działa prawidłowo.</p>
-    <ul>
-        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI</b></a></li>
-        <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny</a></li>
-    </ul>
-    """
-
-
-def petla_zegara_i_emisji():
-    ostatnia_zapowiedziana_godzina = -1
-    ostatnie_czyszczenie_ts = 0
-
-    while True:
-        try:
-            teraz = datetime.now(STREFA_EUROPA)
-            obecny_ts = time.time()
-
-            # Czyszczenie starych plików tymczasowych z folderów "godzina" i "news" (> 2 godziny)
-            if obecny_ts - ostatnie_czyszczenie_ts > 1800:
-                transport, sftp = polacz_sftp()
-                try:
-                    for folder_tymczasowy in (DIR_GODZINA, DIR_NEWS):
-                        for plik in sftp.listdir(folder_tymczasowy):
-                            if plik.endswith(".mp3"):
-                                sciezka_pliku = f"{folder_tymczasowy}/{plik}"
-                                try:
-                                    attr = sftp.stat(sciezka_pliku)
-                                    if obecny_ts - attr.st_mtime > 7200:
-                                        sftp.remove(sciezka_pliku)
-                                except Exception:
-                                    pass
-                except Exception as e:
-                    print(f"Błąd czyszczenia starych plików: {e}")
-                finally:
-                    sftp.close()
-                    transport.close()
-                    ostatnie_czyszczenie_ts = obecny_ts
-
-            # Generowanie zapowiedzi godziny oraz newsów RMF punktualnie na pełną godzinę
-            docelowa_godzina = teraz.hour
-            if teraz.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
-                transport, sftp = polacz_sftp()
-                try:
-                    nazwa_pliku_godzina = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                    sciezka_g = generuj_audio_mp3(zbuduj_tylko_godzine(docelowa_godzina), nazwa_pliku_godzina)
-                    if sciezka_g and os.path.exists(sciezka_g):
-                        sftp.put(sciezka_g, f"{DIR_GODZINA}/{nazwa_pliku_godzina}")
-                        os.remove(sciezka_g)
-                        print(f"Wysłano plik godziny do folderu 'godzina': {nazwa_pliku_godzina}")
-
-                    if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
-                        kwestie_info = zbuduj_informacje_rmf()
-                        if kwestie_info:
-                            nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                            sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info)
-                            if sciezka_i and os.path.exists(sciezka_i):
-                                sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
-                                os.remove(sciezka_i)
-                                print(f"Wysłano plik info do folderu 'news': {nazwa_pliku_info}")
-                finally:
-                    sftp.close()
-                    transport.close()
-                
-                ostatnia_zapowiedziana_godzina = docelowa_godzina
-
-        except Exception as e:
-            print(f"Błąd w pętli głównej zegara: {e}")
-        
-        time.sleep(15)
-
-
-watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
-watek_tlo.start()
-print(">>> Wątek automatyczny radia (zegar, pliki i emisja) został uruchomiony! <<<")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    final_output = os.path.join(DIR_STATIC_OUTPUT,
