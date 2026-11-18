@@ -13,7 +13,7 @@ import feedparser
 import yt_dlp
 import asyncio
 import edge_tts
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 
 app = Flask(__name__)
 
@@ -64,7 +64,6 @@ def polacz_sftp():
 
 
 async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="-6Hz", rate="+0%"):
-    # Przyjmuje dynamiczne wartości suwaków z panelu (np. pitch="-10Hz", rate="-5%")
     communicate = edge_tts.Communicate(tekst, glos, pitch=pitch, rate=rate)
     await communicate.save(sciezka_docelowa)
 
@@ -364,24 +363,34 @@ SZABLON_JINGLES = """
         <h2>🎛️ Radio Strefa Zero - Generator Dżingli AI</h2>
         
         <div class="info-box">
-            🎚️ Masz pełną kontrolę: ustaw własną wysokość tonu głosu oraz głośność podkładu!
+            🎚️ Rozbudowany Panel: Wybierz spośród wielu głosów (w tym głębokie męskie basy i kobiece), ustaw suwak Pitch mocno w minus (np. do -30Hz) dla grubego głosu, wybierz podkład muzyczny i generuj!
         </div>
         
         <form id="generatorForm">
             <label>Tekst dżingla:</label>
             <textarea name="text" rows="4" placeholder="Np. Słuchasz Radio Bit FM! Przed Tobą najlepsze hity klubowe!"></textarea>
             
-            <label>Wybierz bazowy głos:</label>
+            <label>Wybierz głos lektora:</label>
             <select name="voice">
-                <option value="pl-PL-MarekNeural">Marek (Męski - Bazowy radiowy)</option>
-                <option value="pl-PL-ZofiaNeural">Zofia (Kobiecy - Naturalny)</option>
+                <optgroup label="Głosy Męskie (Radiowe / Basowe)">
+                    <option value="pl-PL-MarekNeural">Marek (Głęboki / Radiowy)</option>
+                    <option value="pl-PL-AndrzejNeural">Andrzej (Dynamiczny / Młody)</option>
+                    <option value="pl-PL-JacekNeural">Jacek (Mocny / Wyrazisty)</option>
+                    <option value="pl-PL-TomaszNeural">Tomasz (Ciepły / Spokojny)</option>
+                </optgroup>
+                <optgroup label="Głosy Żeńskie">
+                    <option value="pl-PL-ZofiaNeural">Zofia (Naturalny / Czysty)</option>
+                    <option value="pl-PL-AgnieszkaNeural">Agnieszka (Ciepły radiowy)</option>
+                    <option value="pl-PL-EwaNeural">Ewa (Wyrazisty)</option>
+                    <option value="pl-PL-MagdalenaNeural">Magdalena (Miękki)</option>
+                </optgroup>
             </select>
 
             <div class="slider-label">
-                <span>Wysokość tonu głosu (Pitch):</span>
-                <span id="pitchVal">-6Hz (Głęboki)</span>
+                <span>Wysokość tonu głosu (Pitch) - zejdź w minus dla grubego głosu:</span>
+                <span id="pitchVal">-12Hz (Gruby radiowy bas)</span>
             </div>
-            <input type="range" name="pitch" id="pitch" min="-20" max="10" value="-6" step="1" oninput="updatePitch(this.value)">
+            <input type="range" name="pitch" id="pitch" min="-35" max="15" value="-12" step="1" oninput="updatePitch(this.value)">
 
             <div class="slider-label">
                 <span>Prędkość mowy (Rate):</span>
@@ -419,10 +428,19 @@ SZABLON_JINGLES = """
 
     <script>
         function updatePitch(val) {
-            document.getElementById('pitchVal').innerText = val + 'Hz ' + (val < 0 ? '(Głęboki bas)' : (val > 0 ? '(Wysoki)' : '(Normalny)'));
+            let num = parseInt(val);
+            let sign = num > 0 ? '+' : '';
+            let opis = '';
+            if (num <= -20) opis = '(Super gruby / potężny bas)';
+            else if (num < 0) opis = '(Głęboki radiowy bas)';
+            else if (num > 0) opis = '(Wysoki)';
+            else opis = '(Normalny)';
+            document.getElementById('pitchVal').innerText = sign + val + 'Hz ' + opis;
         }
         function updateRate(val) {
-            document.getElementById('rateVal').innerText = (val > 0 ? '+' + val : val) + '%';
+            let num = parseInt(val);
+            let sign = num > 0 ? '+' : '';
+            document.getElementById('rateVal').innerText = sign + val + '%';
         }
 
         function toggleMusicSelect() {
@@ -477,9 +495,12 @@ def sprawdz_i_pobierz_podklady():
     os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
     istniejace = [f for f in os.listdir(DIR_STATIC_MUSIC) if f.lower().endswith(('.mp3', '.wav'))]
     if not istniejace:
+        # Automatycznie pobieramy większą paczkę różnorodnych darmowych podkładów bitowych
         domyslne_bity = {
-            "bit_klubowy_1.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-            "bit_dyskotekowy_2.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+            "01_bit_klubowy_dance.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+            "02_bit_dyskotekowy_retro.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+            "03_bit_house_energetyczny.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+            "04_bit_techno_mocny.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
         }
         for nazwa, url in domyslne_bity.items():
             sciezka_docelowa = os.path.join(DIR_STATIC_MUSIC, nazwa)
@@ -496,7 +517,7 @@ def sprawdz_i_pobierz_podklady():
 def panel_jingles():
     sprawdz_i_pobierz_podklady()
     music_files = [f for f in os.listdir(DIR_STATIC_MUSIC) if f.lower().endswith(('.mp3', '.wav'))]
-    return render_template_string(SZABLON_JINGLES, music_files=music_files)
+    return render_template_string(SZABLON_JINGLES, music_files=sorted(music_files))
 
 
 @app.route("/generuj-jingle-ai", methods=["POST"])
@@ -506,12 +527,20 @@ def endpoint_generuj_jingle_ai():
     add_music = request.form.get("add_music") == "on"
     selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
     
-    # Odbieramy parametry z suwaków w panelu
-    raw_pitch = request.form.get("pitch", "-6")
+    raw_pitch = request.form.get("pitch", "-12")
     raw_rate = request.form.get("rate", "0")
     
-    pitch_str = f"{raw_pitch}Hz"
-    rate_str = f"{int(raw_rate):+d}%"
+    try:
+        p_val = int(raw_pitch)
+        pitch_str = f"{p_val:+d}Hz"
+    except ValueError:
+        pitch_str = "-12Hz"
+        
+    try:
+        r_val = int(raw_rate)
+        rate_str = f"{r_val:+d}%"
+    except ValueError:
+        rate_str = "+0%"
 
     if not text:
         return jsonify({"status": "error", "message": "Tekst dżingla jest pusty!"}), 400
@@ -523,7 +552,7 @@ def endpoint_generuj_jingle_ai():
     final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
 
     try:
-        # Generowanie z uwzględnieniem suwaków tonu i prędkości
+        # Generowanie mowy z uwzględnieniem wybranego głosu i suwaków
         asyncio.run(async_generuj_edge_tts(text, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
         
         if not os.path.exists(speech_file):
@@ -535,17 +564,23 @@ def endpoint_generuj_jingle_ai():
                 speech = AudioSegment.from_file(speech_file)
                 music = AudioSegment.from_file(music_path)
                 
+                # Dodatkowe efekty: normalizacja głosu, żeby brzmiał profesjonalnie i głośno
+                speech = effects.normalize(speech)
+                
                 target_duration = len(speech) + 2000
                 if len(music) > target_duration:
                     music = music[:target_duration]
                 
+                # Ściszenie podkładu w tle (ducking)
                 music = music - 18
                 combined = music.overlay(speech, position=500)
                 combined.export(final_output, format="mp3")
             else:
                 os.replace(speech_file, final_output)
         else:
-            os.replace(speech_file, final_output)
+            speech = AudioSegment.from_file(speech_file)
+            speech = effects.normalize(speech)
+            speech.export(final_output, format="mp3")
 
         transport, sftp = polacz_sftp()
         try:
