@@ -44,17 +44,6 @@ PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
 
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
-# Koncert życzeń: Poniedziałek - Piątek, od 17:00 do 19:00
-KONCERT_ZYCZEN_DNI = (0, 1, 2, 3, 4)
-KONCERT_ZYCZEN_START = 17
-KONCERT_ZYCZEN_KONIEC = 19
-
-# Piosenka na życzenie: Piątek - Niedziela, od 17:00 do 21:00
-PIOSENKA_NA_ZYCZENIE_DNI = (4, 5, 6)
-PIOSENKA_NA_ZYCZENIE_START = 17
-PIOSENKA_NA_ZYCZENIE_KONIEC = 21
-
-# Serwis informacyjny z RMF FM: Każdy dzień (poniedziałek - niedziela), od 7:00 do 16:00
 INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
 INFO_RMF_START = 7
 INFO_RMF_KONIEC = 16
@@ -74,8 +63,9 @@ def polacz_sftp():
     return transport, sftp
 
 
-async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural"):
-    communicate = edge_tts.Communicate(tekst, glos)
+async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="-6Hz", rate="+0%"):
+    # Przyjmuje dynamiczne wartości suwaków z panelu (np. pitch="-10Hz", rate="-5%")
+    communicate = edge_tts.Communicate(tekst, glos, pitch=pitch, rate=rate)
     await communicate.save(sciezka_docelowa)
 
 
@@ -89,7 +79,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeu
             temp_path = os.path.join(
                 FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}"
             )
-            asyncio.run(async_generuj_edge_tts(tekst, temp_path, glos))
+            asyncio.run(async_generuj_edge_tts(tekst, temp_path, glos, pitch="-6Hz", rate="+0%"))
             if os.path.exists(temp_path):
                 pliki_tymczasowe.append(temp_path)
 
@@ -345,10 +335,6 @@ def test_generuj_godzine():
         return f"Błąd endpointu: {e}", 500
 
 
-# ==========================================
-# MODUŁ: PANEL GENERATORA DŻINGLI AI
-# ==========================================
-
 SZABLON_JINGLES = """
 <!DOCTYPE html>
 <html lang="pl">
@@ -359,6 +345,7 @@ SZABLON_JINGLES = """
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; padding: 30px; }
         .container { max-width: 650px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         textarea, select { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 20px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 5px; box-sizing: border-box; }
+        input[type=range] { width: 100%; margin-top: 5px; margin-bottom: 15px; background: #2d2d2d; }
         button { background: #ff4757; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:hover { background: #ff6b81; }
         .checkbox-group { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
@@ -368,6 +355,7 @@ SZABLON_JINGLES = """
         .back-link:hover { text-decoration: underline; }
         .success-box { background: #2ed57322; border: 1px solid #2ed573; padding: 10px; border-radius: 5px; margin-top: 15px; color: #2ed573; }
         .info-box { background: #3498db22; border: 1px solid #3498db; padding: 10px; border-radius: 5px; margin-bottom: 15px; color: #3498db; font-size: 14px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 14px; color: #ccc; }
     </style>
 </head>
 <body>
@@ -376,28 +364,30 @@ SZABLON_JINGLES = """
         <h2>🎛️ Radio Strefa Zero - Generator Dżingli AI</h2>
         
         <div class="info-box">
-            🎵 Automatyczne podkłady: <b>{{ music_files|length }} dostępne</b>. System automatycznie pobrał gotowe bity radiowe, jeśli folder był pusty!
+            🎚️ Masz pełną kontrolę: ustaw własną wysokość tonu głosu oraz głośność podkładu!
         </div>
         
         <form id="generatorForm">
             <label>Tekst dżingla:</label>
-            <textarea name="text" rows="4" placeholder="Np. Słuchasz Radio Bit FM! Przed Tobą najlepsze hity klubowe i disco polo!"></textarea>
+            <textarea name="text" rows="4" placeholder="Np. Słuchasz Radio Bit FM! Przed Tobą najlepsze hity klubowe!"></textarea>
             
-            <label>Wybierz głos lektora:</label>
+            <label>Wybierz bazowy głos:</label>
             <select name="voice">
-                <optgroup label="Głosy Męskie (Radiowe)">
-                    <option value="pl-PL-MarekNeural">Marek (Głęboki, radiowy)</option>
-                    <option value="pl-PL-AndrzejNeural">Andrzej (Naturalny, dynamiczny)</option>
-                    <option value="pl-PL-JacekNeural">Jacek (Mocny, wyraźny)</option>
-                    <option value="pl-PL-TomaszNeural">Tomasz (Spokojny, ciepły)</option>
-                </optgroup>
-                <optgroup label="Głosy Żeńskie">
-                    <option value="pl-PL-ZofiaNeural">Zofia (Naturalny, elegancki)</option>
-                    <option value="pl-PL-AgnieszkaNeural">Agnieszka (Ciepły, radiowy)</option>
-                    <option value="pl-PL-EwaNeural">Ewa (Wyrazisty)</option>
-                    <option value="pl-PL-MagdalenaNeural">Magdalena (Miękki)</option>
-                </optgroup>
+                <option value="pl-PL-MarekNeural">Marek (Męski - Bazowy radiowy)</option>
+                <option value="pl-PL-ZofiaNeural">Zofia (Kobiecy - Naturalny)</option>
             </select>
+
+            <div class="slider-label">
+                <span>Wysokość tonu głosu (Pitch):</span>
+                <span id="pitchVal">-6Hz (Głęboki)</span>
+            </div>
+            <input type="range" name="pitch" id="pitch" min="-20" max="10" value="-6" step="1" oninput="updatePitch(this.value)">
+
+            <div class="slider-label">
+                <span>Prędkość mowy (Rate):</span>
+                <span id="rateVal">0% (Normalna)</span>
+            </div>
+            <input type="range" name="rate" id="rate" min="-30" max="30" value="0" step="5" oninput="updateRate(this.value)">
 
             <div class="checkbox-group">
                 <input type="checkbox" id="add_music" name="add_music" onchange="toggleMusicSelect()">
@@ -428,6 +418,13 @@ SZABLON_JINGLES = """
     </div>
 
     <script>
+        function updatePitch(val) {
+            document.getElementById('pitchVal').innerText = val + 'Hz ' + (val < 0 ? '(Głęboki bas)' : (val > 0 ? '(Wysoki)' : '(Normalny)'));
+        }
+        function updateRate(val) {
+            document.getElementById('rateVal').innerText = (val > 0 ? '+' + val : val) + '%';
+        }
+
         function toggleMusicSelect() {
             const checkbox = document.getElementById('add_music');
             const container = document.getElementById('musicSelectContainer');
@@ -443,7 +440,7 @@ SZABLON_JINGLES = """
             const formData = new FormData(this);
             const statusMsg = document.getElementById('statusMsg');
             
-            statusMsg.innerText = 'Trwa generowanie głosu AI i miksowanie audio... Proszę czekać.';
+            statusMsg.innerText = '⏳ Trwa generowanie głosu AI i miksowanie audio... Proszę czekać.';
             document.getElementById('result').classList.add('hidden');
             
             try {
@@ -462,11 +459,11 @@ SZABLON_JINGLES = """
                     document.getElementById('downloadBtn').href = data.file_url;
                     document.getElementById('result').classList.remove('hidden');
                 } else {
-                    statusMsg.innerText = 'Błąd: ' + data.message;
+                    statusMsg.innerText = '❌ Błąd: ' + data.message;
                     statusMsg.style.color = '#ff4757';
                 }
             } catch(err) {
-                statusMsg.innerText = 'Błąd połączenia z serwerem.';
+                statusMsg.innerText = '❌ Błąd połączenia z serwerem.';
                 statusMsg.style.color = '#ff4757';
             }
         };
@@ -475,11 +472,11 @@ SZABLON_JINGLES = """
 </html>
 """
 
+
 def sprawdz_i_pobierz_podklady():
     os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
     istniejace = [f for f in os.listdir(DIR_STATIC_MUSIC) if f.lower().endswith(('.mp3', '.wav'))]
     if not istniejace:
-        # Automatyczne pobranie kilku gotowych, darmowych krótkich podkładów bitowych do testów
         domyslne_bity = {
             "bit_klubowy_1.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
             "bit_dyskotekowy_2.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
@@ -494,6 +491,7 @@ def sprawdz_i_pobierz_podklady():
             except Exception as e:
                 print(f"Nie udało się pobrać domyślnego bitu {nazwa}: {e}")
 
+
 @app.route("/jingles", methods=["GET"])
 def panel_jingles():
     sprawdz_i_pobierz_podklady()
@@ -507,6 +505,13 @@ def endpoint_generuj_jingle_ai():
     selected_music = request.form.get("music")
     add_music = request.form.get("add_music") == "on"
     selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
+    
+    # Odbieramy parametry z suwaków w panelu
+    raw_pitch = request.form.get("pitch", "-6")
+    raw_rate = request.form.get("rate", "0")
+    
+    pitch_str = f"{raw_pitch}Hz"
+    rate_str = f"{int(raw_rate):+d}%"
 
     if not text:
         return jsonify({"status": "error", "message": "Tekst dżingla jest pusty!"}), 400
@@ -518,13 +523,12 @@ def endpoint_generuj_jingle_ai():
     final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
 
     try:
-        # 1. Generowanie mowy przez Edge TTS z wybranym głosem
-        asyncio.run(async_generuj_edge_tts(text, speech_file, selected_voice))
+        # Generowanie z uwzględnieniem suwaków tonu i prędkości
+        asyncio.run(async_generuj_edge_tts(text, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
         
         if not os.path.exists(speech_file):
             return jsonify({"status": "error", "message": "Nie udało się wygenerować mowy przez Edge TTS."}), 500
 
-        # 2. Miksowanie z muzyką (jeśli zaznaczono)
         if add_music and selected_music:
             music_path = os.path.join(DIR_STATIC_MUSIC, selected_music)
             if os.path.exists(music_path):
@@ -543,7 +547,6 @@ def endpoint_generuj_jingle_ai():
         else:
             os.replace(speech_file, final_output)
 
-        # 3. Wysyłka pliku na SFTP do folderu jingles
         transport, sftp = polacz_sftp()
         try:
             zdalna_sciezka = f"{DIR_JINGLES}/{nazwa_pliku}"
