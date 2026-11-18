@@ -40,8 +40,6 @@ DIR_KONCERT_ZYCZEN = "Koncert zyczen"
 DIR_PIOSENKA_NA_ZYCZENIE = "piosenka na zyczenie"
 DIR_PIOSENKI_DLA_SLUCHACZY = "piosenki dla sluchaczy"
 
-PLIK_KOLEJKA_ZDALNY = f"{DIR_MAGAZYN}/kolejka_audycji.json"
-
 STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
 
 INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
@@ -125,7 +123,7 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     if not slowa_kluczowe:
         return None
 
-    foldery_do_sprawdzenia = (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, "radio", "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
+    foldery_do_sprawdzenia = (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_JINGLES, "italo disco", "disco polo", "muzyka mix", "muzyka klubowa", ".")
     for folder in foldery_do_sprawdzenia:
         try:
             pliki = sftp.listdir(folder)
@@ -291,7 +289,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             sftp.put(lokalny_glos, zdalny_glos)
             os.remove(lokalny_glos)
 
-        print(f"Dodano zamówienie słuchacza na stałe do folderu: {folder_docelowy}")
+        print(f"Dodano zamówienie słuchacza do folderu: {folder_docelowy}")
     except Exception as e:
         print(f"Blad przetwarzania SMS w tle: {e}")
     finally:
@@ -363,13 +361,22 @@ SZABLON_JINGLES = """
         <h2>🎛️ Radio Strefa Zero - Generator Dżingli AI</h2>
         
         <div class="info-box">
-            🎚️ Rozbudowany Panel: Wybierz spośród wielu głosów (w tym głębokie męskie basy i kobiece), ustaw suwak Pitch mocno w minus (np. do -30Hz) dla grubego głosu, wybierz podkład muzyczny i generuj!
+            🎚️ Wybierz folder docelowy na serwerze, głos, ustaw suwak Pitch na głęboki bas i wyślij plik prosto na antenę!
         </div>
         
         <form id="generatorForm">
-            <label>Tekst dżingla:</label>
+            <label>Tekst zapowiedzi / dżingla:</label>
             <textarea name="text" rows="4" placeholder="Np. Słuchasz Radio Bit FM! Przed Tobą najlepsze hity klubowe!"></textarea>
             
+            <label>📂 Wybierz folder docelowy na serwerze (AzuraCast):</label>
+            <select name="target_folder">
+                <option value="jingles">jingles (Dżingle / Oprawa)</option>
+                <option value="Koncert zyczen">Koncert zyczen (Koncert Życzeń)</option>
+                <option value="piosenka na zyczenie">piosenka na zyczenie (Piosenka na życzenie)</option>
+                <option value="news">news (Serwis informacyjny)</option>
+                <option value="godzina">godzina (Zapowiedzi pełnej godziny)</option>
+            </select>
+
             <label>Wybierz głos lektora:</label>
             <select name="voice">
                 <optgroup label="Głosy Męskie (Radiowe / Basowe)">
@@ -418,11 +425,11 @@ SZABLON_JINGLES = """
         <div id="statusMsg" style="margin-top: 15px; font-weight: bold; text-align: center;"></div>
 
         <div id="result" class="hidden">
-            <div class="success-box">Sukces! Plik został wygenerowany i pomyślnie wysłany do folderu <b>jingles</b> na serwerze stacji.</div>
+            <div class="success-box" id="successBoxText">Sukces! Plik został wygenerowany i pomyślnie wysłany na serwer.</div>
             <h3>Odsłuch podglądowy:</h3>
             <audio id="audioPlayer" controls></audio>
             <br><br>
-            <a id="downloadBtn" href="#" download="jingle.mp3"><button style="background: #2ed573;">Pobierz plik lokalnie 💾</button></a>
+            <a id="downloadBtn" href="#" download="audio.mp3"><button style="background: #2ed573;">Pobierz plik lokalnie 💾</button></a>
         </div>
     </div>
 
@@ -470,6 +477,7 @@ SZABLON_JINGLES = """
                 const data = await response.json();
                 if(data.status === 'success') {
                     statusMsg.innerText = '';
+                    document.getElementById('successBoxText').innerHTML = 'Sukces! Plik został pomyślnie wysłany do folderu <b>' + data.folder + '</b> na serwerze stacji.';
                     const audioPlayer = document.getElementById('audioPlayer');
                     audioPlayer.src = data.file_url + '?' + new Date().getTime();
                     audioPlayer.load();
@@ -495,7 +503,6 @@ def sprawdz_i_pobierz_podklady():
     os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
     istniejace = [f for f in os.listdir(DIR_STATIC_MUSIC) if f.lower().endswith(('.mp3', '.wav'))]
     if not istniejace:
-        # Automatycznie pobieramy większą paczkę różnorodnych darmowych podkładów bitowych
         domyslne_bity = {
             "01_bit_klubowy_dance.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
             "02_bit_dyskotekowy_retro.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
@@ -526,7 +533,18 @@ def endpoint_generuj_jingle_ai():
     selected_music = request.form.get("music")
     add_music = request.form.get("add_music") == "on"
     selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
+    target_folder = request.form.get("target_folder", "jingles")
     
+    # Walidacja folderu docelowego (zabezpieczenie przed wpisaniem czegokolwiek)
+    dopuszczalne_foldery = {
+        "jingles": DIR_JINGLES,
+        "Koncert zyczen": DIR_KONCERT_ZYCZEN,
+        "piosenka na zyczenie": DIR_PIOSENKA_NA_ZYCZENIE,
+        "news": DIR_NEWS,
+        "godzina": DIR_GODZINA
+    }
+    zdalny_katalog = dopuszczalne_foldery.get(target_folder, DIR_JINGLES)
+
     raw_pitch = request.form.get("pitch", "-12")
     raw_rate = request.form.get("rate", "0")
     
@@ -546,13 +564,12 @@ def endpoint_generuj_jingle_ai():
         return jsonify({"status": "error", "message": "Tekst dżingla jest pusty!"}), 400
 
     znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
-    nazwa_pliku = f"jingle_{znacznik}.mp3"
+    nazwa_pliku = f"item_{znacznik}.mp3"
     
     speech_file = os.path.join(FOLDER_ROBOCZY, f"speech_{znacznik}.mp3")
     final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
 
     try:
-        # Generowanie mowy z uwzględnieniem wybranego głosu i suwaków
         asyncio.run(async_generuj_edge_tts(text, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
         
         if not os.path.exists(speech_file):
@@ -564,14 +581,12 @@ def endpoint_generuj_jingle_ai():
                 speech = AudioSegment.from_file(speech_file)
                 music = AudioSegment.from_file(music_path)
                 
-                # Dodatkowe efekty: normalizacja głosu, żeby brzmiał profesjonalnie i głośno
                 speech = effects.normalize(speech)
                 
                 target_duration = len(speech) + 2000
                 if len(music) > target_duration:
                     music = music[:target_duration]
                 
-                # Ściszenie podkładu w tle (ducking)
                 music = music - 18
                 combined = music.overlay(speech, position=500)
                 combined.export(final_output, format="mp3")
@@ -584,20 +599,21 @@ def endpoint_generuj_jingle_ai():
 
         transport, sftp = polacz_sftp()
         try:
-            zdalna_sciezka = f"{DIR_JINGLES}/{nazwa_pliku}"
+            zdalna_sciezka = f"{zdalny_katalog}/{nazwa_pliku}"
             sftp.put(final_output, zdalna_sciezka)
-            print(f"Wysłano nowy dżingle AI na serwer: {zdalna_sciezka}")
+            print(f"Wysłano plik audio do folderu: {zdalna_sciezka}")
         finally:
             sftp.close()
             transport.close()
 
         return jsonify({
             "status": "success", 
+            "folder": target_folder,
             "file_url": f"/static/output/{nazwa_pliku}"
         })
 
     except Exception as e:
-        print(f"Błąd generatora dżingli: {e}")
+        print(f"Błąd generatora: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -607,7 +623,7 @@ def index_glowna():
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
     <p>System automatyzacji radia, zegara i zamówień SMS działa prawidłowo.</p>
     <ul>
-        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI</b></a></li>
+        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI i Zapowiedzi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny</a></li>
     </ul>
     """
@@ -653,7 +669,7 @@ def petla_zegara_i_emisji():
                         os.remove(sciezka_g)
                         print(f"Wysłano plik godziny do folderu 'godzina': {nazwa_pliku_godzina}")
 
-                    if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
+                    if INFO_RMF_START <= docelowa_godzina < INFO_RMN_KONIEC if 'INFO_RMN_KONIEC' in globals() else INFO_RMF_KONIEC:
                         kwestie_info = zbuduj_informacje_rmf()
                         if kwestie_info:
                             nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
