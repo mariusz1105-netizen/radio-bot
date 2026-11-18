@@ -347,7 +347,7 @@ def test_generuj_godzine():
 
 
 # ==========================================
-# NOWY MODUŁ: PANEL GENERATORA DŽINGLI AI
+# MODUŁ: PANEL GENERATORA DŻINGLI AI
 # ==========================================
 
 SZABLON_JINGLES = """
@@ -430,7 +430,7 @@ SZABLON_JINGLES = """
             const formData = new FormData(this);
             const statusMsg = document.getElementById('statusMsg');
             
-            statusMsg.innerText = '⏳ Trますが generowanie głosu AI i miksowanie audio... Proszę czekać.';
+            statusMsg.innerText = 'Trwa generowanie głosu AI i miksowanie audio... Proszę czekać.';
             document.getElementById('result').classList.add('hidden');
             
             try {
@@ -449,11 +449,11 @@ SZABLON_JINGLES = """
                     document.getElementById('downloadBtn').href = data.file_url;
                     document.getElementById('result').classList.remove('hidden');
                 } else {
-                    statusMsg.innerText = '❌ Błąd: ' + data.message;
+                    statusMsg.innerText = 'Błąd: ' + data.message;
                     statusMsg.style.color = '#ff4757';
                 }
             } catch(err) {
-                statusMsg.innerText = '❌ Błąd połączenia z serwerem.';
+                statusMsg.innerText = 'Błąd połączenia z serwerem.';
                 statusMsg.style.color = '#ff4757';
             }
         };
@@ -496,4 +496,121 @@ def endpoint_generuj_jingle_ai():
             music_path = os.path.join(DIR_STATIC_MUSIC, selected_music)
             if os.path.exists(music_path):
                 speech = AudioSegment.from_file(speech_file)
-                music
+                music = AudioSegment.from_file(music_path)
+                
+                target_duration = len(speech) + 2000
+                if len(music) > target_duration:
+                    music = music[:target_duration]
+                
+                # Ściszenie podkładu w tle (ducking) o 18 dB
+                music = music - 18
+                
+                # Nałożenie głosu na podkład (z opóźnieniem 500ms)
+                combined = music.overlay(speech, position=500)
+                combined.export(final_output, format="mp3")
+            else:
+                os.replace(speech_file, final_output)
+        else:
+            os.replace(speech_file, final_output)
+
+        # 3. Automatyczna wysyłka pliku na SFTP do folderu jingles
+        transport, sftp = polacz_sftp()
+        try:
+            zdalna_sciezka = f"{DIR_JINGLES}/{nazwa_pliku}"
+            sftp.put(final_output, zdalna_sciezka)
+            print(f"Wysłano nowy dżingle AI na serwer: {zdalna_sciezka}")
+        finally:
+            sftp.close()
+            transport.close()
+
+        return jsonify({
+            "status": "success", 
+            "file_url": f"/static/output/{nazwa_pliku}"
+        })
+
+    except Exception as e:
+        print(f"Błąd generatora dżingli: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/")
+def index_glowna():
+    return """
+    <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
+    <p>System automatyzacji radia, zegara i zamówień SMS działa prawidłowo.</p>
+    <ul>
+        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI</b></a></li>
+        <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny</a></li>
+    </ul>
+    """
+
+
+def petla_zegara_i_emisji():
+    ostatnia_zapowiedziana_godzina = -1
+    ostatnie_czyszczenie_ts = 0
+
+    while True:
+        try:
+            teraz = datetime.now(STREFA_EUROPA)
+            obecny_ts = time.time()
+
+            # Czyszczenie starych plików tymczasowych z folderów "godzina" i "news" (> 2 godziny)
+            if obecny_ts - ostatnie_czyszczenie_ts > 1800:
+                transport, sftp = polacz_sftp()
+                try:
+                    for folder_tymczasowy in (DIR_GODZINA, DIR_NEWS):
+                        for plik in sftp.listdir(folder_tymczasowy):
+                            if plik.endswith(".mp3"):
+                                sciezka_pliku = f"{folder_tymczasowy}/{plik}"
+                                try:
+                                    attr = sftp.stat(sciezka_pliku)
+                                    if obecny_ts - attr.st_mtime > 7200:
+                                        sftp.remove(sciezka_pliku)
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    print(f"Błąd czyszczenia starych plików: {e}")
+                finally:
+                    sftp.close()
+                    transport.close()
+                    ostatnie_czyszczenie_ts = obecny_ts
+
+            # Generowanie zapowiedzi godziny oraz newsów RMF punktualnie na pełną godzinę
+            docelowa_godzina = teraz.hour
+            if teraz.minute == 0 and docelowa_godzina != ostatnia_zapowiedziana_godzina:
+                transport, sftp = polacz_sftp()
+                try:
+                    nazwa_pliku_godzina = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+                    sciezka_g = generuj_audio_mp3(zbuduj_tylko_godzine(docelowa_godzina), nazwa_pliku_godzina)
+                    if sciezka_g and os.path.exists(sciezka_g):
+                        sftp.put(sciezka_g, f"{DIR_GODZINA}/{nazwa_pliku_godzina}")
+                        os.remove(sciezka_g)
+                        print(f"Wysłano plik godziny do folderu 'godzina': {nazwa_pliku_godzina}")
+
+                    if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
+                        kwestie_info = zbuduj_informacje_rmf()
+                        if kwestie_info:
+                            nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+                            sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info)
+                            if sciezka_i and os.path.exists(sciezka_i):
+                                sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
+                                os.remove(sciezka_i)
+                                print(f"Wysłano plik info do folderu 'news': {nazwa_pliku_info}")
+                finally:
+                    sftp.close()
+                    transport.close()
+                
+                ostatnia_zapowiedziana_godzina = docelowa_godzina
+
+        except Exception as e:
+            print(f"Błąd w pętli głównej zegara: {e}")
+        
+        time.sleep(15)
+
+
+watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+watek_tlo.start()
+print(">>> Wątek automatyczny radia (zegar, pliki i emisja) został uruchomiony! <<<")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
