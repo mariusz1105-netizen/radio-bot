@@ -93,16 +93,16 @@ INFO_RMF_KONIEC = 23
 NUMER_TEL_TEKST = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
 PULA_BOTOW = {
-    "marek_standard": {"name": "Marek (Klasyczny)", "voice": "pl-PL-MarekNeural", "pitch": -12, "rate": 0},
-    "marek_bas": {"name": "Marek (Głęboki Bas)", "voice": "pl-PL-MarekNeural", "pitch": -18, "rate": -3},
-    "marek_noc": {"name": "Marek (Nocny Klub)", "voice": "pl-PL-MarekNeural", "pitch": -16, "rate": 2},
-    "zofia_standard": {"name": "Zofia (Prezenterka)", "voice": "pl-PL-ZofiaNeural", "pitch": -2, "rate": 0},
-    "zofia_news": {"name": "Zofia (Newsy)", "voice": "pl-PL-ZofiaNeural", "pitch": 0, "rate": 4},
+    "marek_standard": {"name": "Marek (Klasyczny)", "voice": "pl-PL-MarekNeural", "pitch": 0, "rate": 0},
+    "marek_bas": {"name": "Marek (Spokojny / Niski)", "voice": "pl-PL-MarekNeural", "pitch": 0, "rate": -5},
+    "marek_noc": {"name": "Marek (Nocny Klub)", "voice": "pl-PL-MarekNeural", "pitch": 0, "rate": 5},
+    "zofia_standard": {"name": "Zofia (Prezenterka)", "voice": "pl-PL-ZofiaNeural", "pitch": 0, "rate": 0},
+    "zofia_news": {"name": "Zofia (Newsy)", "voice": "pl-PL-ZofiaNeural", "pitch": 0, "rate": 5},
 }
 
 KACIK_NOSTALGII = [
-    "Kącik nostalgii w Radiu Strefa Zero: niektóre melodie z lat osiemdziesiątych i dziewięćdziesiątych mają w sobie energię, której nie zastąpi żaden współczesny bit.",
-    "Wracamy do złotych czasów parkietu! Italo disco i klubowa klasyka w Radiu Strefa Zero zawsze robią świetny klimat.",
+    "Kącik nostalgii w Radiu Strefa Zero: wracamy do wielkich hitów z lat osiemdziesiątych i dziewięćdziesiątych, które do dziś mają w sobie świetną energię.",
+    "Klasyka parkietu w Radiu Strefa Zero: italo disco i taneczne numery sprzed lat, które zawsze dobrze brzmią na głośnikach.",
 ]
 
 KAWALY_TEKSTY = [
@@ -120,6 +120,34 @@ DOZWOLONE_SKROTY = {"DJ", "FM", "MP3", "SMS", "TV", "VIP", "AI", "URL", "API", "
 
 terminy_lock = threading.Lock()
 glosy_lock = threading.Lock()
+
+
+def _format_pitch(pitch) -> str:
+    if isinstance(pitch, int):
+        return f"{pitch:+d}Hz"
+    s = str(pitch).strip()
+    if not s:
+        return "+0Hz"
+    if s.endswith("Hz"):
+        return s if s.startswith(("+", "-")) else f"+{s}"
+    try:
+        return f"{int(s):+d}Hz"
+    except ValueError:
+        return "+0Hz"
+
+
+def _format_rate(rate) -> str:
+    if isinstance(rate, int):
+        return f"{rate:+d}%"
+    s = str(rate).strip()
+    if not s:
+        return "+0%"
+    if s.endswith("%"):
+        return s if s.startswith(("+", "-")) else f"+{s}"
+    try:
+        return f"{int(s):+d}%"
+    except ValueError:
+        return "+0%"
 
 
 def zsynchronizuj_azuracast():
@@ -287,15 +315,35 @@ def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str) -> bool:
     return False
 
 
-async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="-12Hz", rate="+0%"):
-    pitch_str = f"{int(pitch):+d}Hz" if isinstance(pitch, int) else str(pitch)
-    rate_str = f"{int(rate):+d}%" if isinstance(rate, int) else str(rate)
-    if not _elevenlabs_zapisz(tekst, sciezka_docelowa):
-        communicate = edge_tts.Communicate(tekst, glos, pitch=pitch_str, rate=rate_str)
-        await communicate.save(sciezka_docelowa)
+async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="+0Hz", rate="+0%"):
+    if _elevenlabs_zapisz(tekst, sciezka_docelowa):
+        return
+
+    pitch_str = _format_pitch(pitch)
+    rate_str = _format_rate(rate)
+    warianty = [
+        (glos, pitch_str, rate_str),
+        (glos, "+0Hz", rate_str),
+        (glos, "+0Hz", "+0%"),
+        ("pl-PL-MarekNeural", "+0Hz", "+0%"),
+    ]
+    ostatni_blad = None
+    for v_name, p_s, r_s in warianty:
+        try:
+            communicate = edge_tts.Communicate(tekst, v_name, pitch=p_s, rate=r_s)
+            await communicate.save(sciezka_docelowa)
+            if os.path.exists(sciezka_docelowa) and os.path.getsize(sciezka_docelowa) > 0:
+                return
+        except Exception as e:
+            ostatni_blad = e
+            logging.warning(f"Edge-TTS próba ({v_name}, pitch={p_s}, rate={r_s}) nieudana: {e}")
+            continue
+
+    if ostatni_blad:
+        raise ostatni_blad
 
 
-def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeural", pitch="-12Hz", rate="+0%", czy_sms=False):
+def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeural", pitch="+0Hz", rate="+0%", czy_sms=False):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = []
     try:
@@ -871,7 +919,7 @@ SZABLON_JINGLES = """
 
         <div style="margin-bottom: 14px;">
             <span style="font-size: 13px; color: #aaa; display: block; margin-bottom: 6px;">Szybkie szablony zapowiedzi:</span>
-            <button type="button" class="btn-preset" onclick="wstawSzablon('Cofamy się w czasie do złotych lat osiemdziesiątych i dziewięćdziesiątych. Posłuchajcie, co wtedy rozgrzewało parkiety w Radiu Strefa Zero!')">🕰️ Kapsuła Czasu</button>
+            <button type="button" class="btn-preset" onclick="wstawSzablon('Wracamy do złotych hitów z lat osiemdziesiątych i dziewięćdziesiątych. Sprawdź, co z tamtych lat gra teraz w Radiu Strefa Zero!')">🕰️ Klasyki 80/90</button>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Starcie gatunków w Radiu Strefa Zero! Co wolisz na kolejnym bloku – energetyczne disco polo czy klasyczne italo disco?')">⚔️ Bitwa Gatunków</button>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Nocne pasmo w Radiu Strefa Zero. Głęboki bit, zero pośpiechu i muzyka, która trzyma na nogach do rana.')">🌙 Nocny Klimat</button>
         </div>
@@ -901,15 +949,15 @@ SZABLON_JINGLES = """
 
             <label>Wybierz głos lektora:</label>
             <select name="voice" id="voice_select">
-                <optgroup label="Głosy Męskie (Radiowe / Basowe)">
-                    <option value="pl-PL-MarekNeural">Marek (Głęboki / Radiowy)</option>
-                    <option value="pl-PL-AndrzejNeural">Andrzej (Dynamiczny / Młody)</option>
-                    <option value="pl-PL-JacekNeural">Jacek (Mocny / Wyrazisty)</option>
-                    <option value="pl-PL-TomaszNeural">Tomasz (Ciepły / Spokojny)</option>
+                <optgroup label="Głosy Męskie">
+                    <option value="pl-PL-MarekNeural">Marek (Klasyczny)</option>
+                    <option value="pl-PL-AndrzejNeural">Andrzej (Dynamiczny)</option>
+                    <option value="pl-PL-JacekNeural">Jacek (Wyrazisty)</option>
+                    <option value="pl-PL-TomaszNeural">Tomasz (Spokojny)</option>
                 </optgroup>
                 <optgroup label="Głosy Żeńskie">
                     <option value="pl-PL-ZofiaNeural">Zofia (Naturalny / Czysty)</option>
-                    <option value="pl-PL-AgnieszkaNeural">Agnieszka (Ciepły radiowy)</option>
+                    <option value="pl-PL-AgnieszkaNeural">Agnieszka (Ciepły)</option>
                     <option value="pl-PL-EwaNeural">Ewa (Wyrazisty)</option>
                     <option value="pl-PL-MagdalenaNeural">Magdalena (Miękki)</option>
                 </optgroup>
@@ -917,15 +965,15 @@ SZABLON_JINGLES = """
 
             <div class="slider-label">
                 <span>Wysokość tonu głosu (Pitch):</span>
-                <span id="pitchVal">-12Hz (Głęboki radiowy bas)</span>
+                <span id="pitchVal">0Hz (Naturalny)</span>
             </div>
-            <input type="range" name="pitch" id="pitch" min="-35" max="15" value="-12" step="1" oninput="updatePitch(this.value)">
+            <input type="range" name="pitch" id="pitch" min="-15" max="15" value="0" step="1" oninput="updatePitch(this.value)">
 
             <div class="slider-label">
                 <span>Prędkość mowy (Rate):</span>
                 <span id="rateVal">0% (Normalna)</span>
             </div>
-            <input type="range" name="rate" id="rate" min="-30" max="30" value="0" step="5" oninput="updateRate(this.value)">
+            <input type="range" name="rate" id="rate" min="-25" max="25" value="0" step="5" oninput="updateRate(this.value)">
 
             <div class="checkbox-group">
                 <input type="checkbox" id="add_music" name="add_music" onchange="toggleMusicSelect()">
@@ -1019,11 +1067,7 @@ SZABLON_JINGLES = """
         function updatePitch(val) {
             let num = parseInt(val);
             let sign = num > 0 ? '+' : '';
-            let opis = '';
-            if (num <= -20) opis = '(Super gruby / potężny bas)';
-            else if (num < 0) opis = '(Głęboki radiowy bas)';
-            else if (num > 0) opis = '(Wysoki)';
-            else opis = '(Normalny)';
+            let opis = num < 0 ? '(Niższy)' : (num > 0 ? '(Wyższy)' : '(Naturalny)');
             document.getElementById('pitchVal').innerText = sign + val + 'Hz ' + opis;
         }
         function updateRate(val) {
@@ -1189,13 +1233,13 @@ def endpoint_generuj_jingle_ai():
     zdalny_katalog = target_folder if target_folder in WSZYSTKIE_FOLDERY_SFTP else DIR_JINGLES
 
     try:
-        p_val = max(-35, min(15, int(request.form.get("pitch", "-12"))))
+        p_val = max(-15, min(15, int(request.form.get("pitch", "0"))))
         pitch_str = f"{p_val:+d}Hz"
     except ValueError:
-        pitch_str = "-12Hz"
+        pitch_str = "+0Hz"
 
     try:
-        r_val = max(-30, min(30, int(request.form.get("rate", "0"))))
+        r_val = max(-25, min(25, int(request.form.get("rate", "0"))))
         rate_str = f"{r_val:+d}%"
     except ValueError:
         rate_str = "+0%"
@@ -1413,7 +1457,7 @@ def petla_harmonogramu_w_tle():
                             kwestie_info = zbuduj_informacje_rmf()
                             if kwestie_info:
                                 nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                                sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
+                                sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+5%")
                                 if sciezka_i and os.path.exists(sciezka_i):
                                     sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
                                     os.remove(sciezka_i)
@@ -1423,7 +1467,7 @@ def petla_harmonogramu_w_tle():
                         if docelowa_godzina == 7:
                             kwestie_poranek = zbuduj_poranny_serwis()
                             nazwa_poranek = f"poranek_{teraz.strftime('%Y%m%d')}.mp3"
-                            sciezka_por = generuj_audio_mp3(kwestie_poranek, nazwa_poranek, glos="pl-PL-ZofiaNeural", pitch="-2Hz", rate="+0%")
+                            sciezka_por = generuj_audio_mp3(kwestie_poranek, nazwa_poranek, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+0%")
                             if sciezka_por and os.path.exists(sciezka_por):
                                 sftp.put(sciezka_por, f"{DIR_JINGLES}/{nazwa_poranek}")
                                 os.remove(sciezka_por)
@@ -1472,7 +1516,7 @@ def petla_harmonogramu_w_tle():
                 lata = [1984, 1986, 1988, 1990, 1993, 1996, 1999]
                 rok = lata[teraz.day % len(lata)]
                 if _wykonaj_wstawke_i_wyslij(
-                    [("glos", f"Kapsuła Czasu w Radiu Strefa Zero! Cofamy się do roku {rok} — sprawdzamy, co wtedy królowało na parkietach!")],
+                    [("glos", f"Wspomnienia z roku {rok}! Sprawdzamy, co wtedy rozgrzewało parkiety na świecie.")],
                     DIR_AUDYCJE_SPECJALNE,
                     f"kapsula_{teraz.strftime('%Y%m%d')}.mp3",
                     bot_key="marek_bas",
