@@ -1,26 +1,25 @@
-import os
-import re
 import json
-import time
-import threading
-import random
 import logging
-import asyncio
-from datetime import datetime
+import os
+import random
+import re
+import threading
+import time
 from zoneinfo import ZoneInfo
 
-from flask import Flask, request, render_template_string, jsonify
-import paramiko
-import requests
-import feedparser
-import yt_dlp
 import edge_tts
+import feedparser
+from flask import Flask, jsonify, render_template_string, request
+import paramiko
 from pydub import AudioSegment, effects
+from pydub.silence import detect_leading_silence
+import requests
+import yt_dlp
 
 logging.basicConfig(
     filename="radio_bot.log",
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
 app = Flask(__name__)
@@ -29,6 +28,7 @@ FOLDER_ROBOCZY = "roboczy_radio"
 DIR_STATIC_MUSIC = "static/music"
 DIR_STATIC_OUTPUT = "static/output"
 PLIK_TERMINY_REKLAM = os.path.join(FOLDER_ROBOCZY, "reklamy_terminy.json")
+PLIK_GLOSOW_BITWY = os.path.join(FOLDER_ROBOCZY, "bitwa_glosy.json")
 
 os.makedirs(FOLDER_ROBOCZY, exist_ok=True)
 os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
@@ -39,9 +39,12 @@ SFTP_PORT = int(os.environ.get("SFTP_PORT", 2022))
 SFTP_USER = os.environ.get("SFTP_USER", "radio-bot")
 SFTP_PASS = os.environ.get("SFTP_PASS", "")
 
-AZURACAST_URL = os.environ.get("AZURACAST_URL", "").rstrip("/")
+AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://a7.asurahosting.com").rstrip("/")
 AZURACAST_API_KEY = os.environ.get("AZURACAST_API_KEY", "")
 AZURACAST_STATION_ID = int(os.environ.get("AZURACAST_STATION_ID", 461))
+
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
 
 DIR_JINGLES = "jingles"
 DIR_MAGAZYN = "magazyn_zyczen"
@@ -53,13 +56,15 @@ DIR_PIOSENKA_NA_ZYCZENIE = "piosenka na zyczenie"
 DIR_PIOSENKI_DLA_SLUCHACZY = "piosenki dla sluchaczy"
 DIR_BLOK_REKLAMOWY = "blok reklamowy"
 DIR_MIXY = "mixy"
+DIR_WSTAWKI_AI = "wstawki_ai"
+DIR_AUDYCJE_SPECJALNE = "audycje_specjalne"
 
 FOLDERY_GATUNKOWE = [
     "disco polo",
     "disco polo dance",
     "muzyka klubowa",
     "italo disco",
-    "muzyka mix"
+    "muzyka mix",
 ]
 
 WSZYSTKIE_FOLDERY_SFTP = (
@@ -73,17 +78,46 @@ WSZYSTKIE_FOLDERY_SFTP = (
     DIR_PIOSENKI_DLA_SLUCHACZY,
     DIR_BLOK_REKLAMOWY,
     DIR_MIXY,
+    DIR_WSTAWKI_AI,
+    DIR_AUDYCJE_SPECJALNE,
 ) + tuple(FOLDERY_GATUNKOWE)
 
-STREFA_EUROPA = ZoneInfo("Europe/Warsaw")
+STREFA_EUROPA = ZoneInfo(os.environ.get("TIMEZONE", "Europe/Warsaw"))
 
 INFO_RMF_DNI = (0, 1, 2, 3, 4, 5, 6)
 INFO_RMF_START = 7
-INFO_RMF_KONIEC = 16
+INFO_RMF_KONIEC = 23
 
 NUMER_TEL_TEKST = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
+PULA_BOTOW = {
+    "marek_standard": {"name": "Marek (Klasyczny)", "voice": "pl-PL-MarekNeural", "pitch": -12, "rate": 0},
+    "marek_bas": {"name": "Marek (Głęboki Bas)", "voice": "pl-PL-MarekNeural", "pitch": -18, "rate": -3},
+    "marek_noc": {"name": "Marek (Nocny Klub)", "voice": "pl-PL-MarekNeural", "pitch": -16, "rate": 2},
+    "zofia_standard": {"name": "Zofia (Prezenterka)", "voice": "pl-PL-ZofiaNeural", "pitch": -2, "rate": 0},
+    "zofia_news": {"name": "Zofia (Newsy)", "voice": "pl-PL-ZofiaNeural", "pitch": 0, "rate": 4},
+}
+
+KACIK_NOSTALGII = [
+    "Kącik nostalgii w Radiu Strefa Zero: niektóre melodie z lat osiemdziesiątych i dziewięćdziesiątych mają w sobie energię, której nie zastąpi żaden współczesny bit.",
+    "Wracamy do złotych czasów parkietu! Italo disco i klubowa klasyka w Radiu Strefa Zero zawsze robią świetny klimat.",
+]
+
+KAWALY_TEKSTY = [
+    "Przychodzi facet do lekarza i mówi: Panie doktorze, nikt mnie nie zauważa. Lekarz podnosi wzrok i mówi: Następny proszę!",
+    "Dlaczego informatyk nie lubi chodzić na grzyby? Bo ma za dużo robaków i zero wsparcia technicznego.",
+    "Rozmawiają dwa zegary na ścianie. Jeden mówi: Stary, strasznie szybko ten czas leci. Drugi odpowiada: Nie narzekaj, przynajmniej mamy wskazówki.",
+]
+
+KACIK_WEEKENDOWY = [
+    "Weekendowy start w Radiu Strefa Zero! Podkręcamy głośność, zbijamy zmęczenie tygodnia i wjeżdżamy w imprezowy klimat!",
+    "Piątek, sobota, niedziela — kiedy inni zwalniają, u nas wchodzi pełna energia i taneczne uderzenie prosto na parkiet!",
+]
+
+DOZWOLONE_SKROTY = {"DJ", "FM", "MP3", "SMS", "TV", "VIP", "AI", "URL", "API", "SFTP", "BPM"}
+
 terminy_lock = threading.Lock()
+glosy_lock = threading.Lock()
 
 
 def zsynchronizuj_azuracast():
@@ -120,6 +154,27 @@ def zapisz_terminy_reklam(dane):
                 json.dump(dane, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logging.error(f"Błąd zapisu terminów reklam: {e}")
+
+
+def _wczytaj_glosy():
+    with glosy_lock:
+        if not os.path.exists(PLIK_GLOSOW_BITWY):
+            return {"DYSKOTEKA": 0, "ITALO": 0}
+        try:
+            with open(PLIK_GLOSOW_BITWY, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                return {"DYSKOTEKA": int(d.get("DYSKOTEKA", 0)), "ITALO": int(d.get("ITALO", 0))}
+        except Exception:
+            return {"DYSKOTEKA": 0, "ITALO": 0}
+
+
+def _zapisz_glosy(dane):
+    with glosy_lock:
+        try:
+            with open(PLIK_GLOSOW_BITWY, "w", encoding="utf-8") as f:
+                json.dump(dane, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f"Błąd zapisu głosów bitwy: {e}")
 
 
 def polacz_sftp():
@@ -161,20 +216,93 @@ def uruchom_async(coro):
             nowa_petla.close()
 
 
+def _sklej_rozstrzelone(match: re.Match) -> str:
+    litery = re.findall(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]", match.group(0))
+    sklejone = "".join(litery)
+    return sklejone.upper() if sklejone.upper() in DOZWOLONE_SKROTY else sklejone.lower()
+
+
+def inteligentna_korekta(tekst: str, czy_sms: bool = False) -> str:
+    if not tekst:
+        return ""
+    t = tekst.strip()
+    if czy_sms:
+        t = re.sub(r"https?://\S+|www\.\S+", "", t, flags=re.IGNORECASE)
+        t = re.sub(r"([*#_~=\-+<>])\1{1,}", " ", t)
+
+    t = re.sub(
+        r"(?<!\w)(?:[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż][\s\-\.]+){2,}[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż](?!\w)",
+        _sklej_rozstrzelone,
+        t,
+    )
+    t = re.sub(r"([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż])\1{2,}", r"\1", t)
+
+    slownik_poprawek = {
+        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
+        "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
+        "dzien": "dzień", "urodziny": "urodziny", "imieniny": "imieniny", "dziekuje": "dziękuję",
+        "dzieki": "dzięki", "sie": "się", "ze": "że", "dzis": "dziś", "tez": "też",
+        "wogole": "w ogóle", "narazie": "na razie", "najlepszego": "najlepszego",
+        "caluski": "całuski", "pozdrowionka": "pozdrowionka", "muzyczka": "muzyczka",
+        "mozna": "można", "wiecej": "więcej", "jesli": "jeśli", "ktos": "ktoś",
+        "cos": "coś", "zrobic": "zrobić", "piosenke": "piosenkę", "nwm": "nie wiem",
+    }
+
+    poprawione = []
+    for s in t.split():
+        klucz = s.strip(".,!?").lower()
+        poprawione.append(slownik_poprawek.get(klucz, s))
+
+    wynik = " ".join(poprawione)
+    wynik = re.sub(r"[^0-9A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\s,.!?\-–—]", " ", wynik)
+    return re.sub(r"\s{2,}", " ", wynik).strip(" ,.-–—")
+
+
+def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str) -> bool:
+    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
+        return False
+    try:
+        resp = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            json={
+                "text": tekst,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability": 0.45, "similarity_boost": 0.75},
+            },
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            },
+            timeout=25,
+        )
+        if resp.status_code == 200 and resp.content:
+            with open(sciezka_mp3, "wb") as f:
+                f.write(resp.content)
+            return True
+    except Exception as e:
+        logging.warning(f"Fallback ElevenLabs -> Edge-TTS: {e}")
+    return False
+
+
 async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="-12Hz", rate="+0%"):
-    communicate = edge_tts.Communicate(tekst, glos, pitch=pitch, rate=rate)
-    await communicate.save(sciezka_docelowa)
+    pitch_str = f"{int(pitch):+d}Hz" if isinstance(pitch, int) else str(pitch)
+    rate_str = f"{int(rate):+d}%" if isinstance(rate, int) else str(rate)
+    if not _elevenlabs_zapisz(tekst, sciezka_docelowa):
+        communicate = edge_tts.Communicate(tekst, glos, pitch=pitch_str, rate=rate_str)
+        await communicate.save(sciezka_docelowa)
 
 
-def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeural", pitch="-12Hz", rate="+0%"):
+def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeural", pitch="-12Hz", rate="+0%", czy_sms=False):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = []
     try:
         for idx, (_, tekst) in enumerate(lista_kwestii):
-            if not tekst or not tekst.strip():
+            oczyszczony = inteligentna_korekta(tekst or "", czy_sms=czy_sms)
+            if not oczyszczony:
                 continue
             temp_path = os.path.join(FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}")
-            uruchom_async(async_generuj_edge_tts(tekst, temp_path, glos, pitch=pitch, rate=rate))
+            uruchom_async(async_generuj_edge_tts(oczyszczony, temp_path, glos, pitch=pitch, rate=rate))
             if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
                 pliki_tymczasowe.append(temp_path)
 
@@ -191,7 +319,7 @@ def generuj_audio_mp3(lista_kwestii, nazwa_pliku_koncowego, glos="pl-PL-MarekNeu
         polaczony_segment.export(sciezka_koncowa, format="mp3")
         return sciezka_koncowa
     except Exception as e:
-        logging.error(f"Błąd generatora Edge TTS: {e}")
+        logging.error(f"Błąd generatora TTS: {e}")
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -218,6 +346,25 @@ def pobierz_aktualne_newsy_rmf():
                 return "Najświeższe informacje z RMF FM: " + ". ".join(newsy) + "."
         except Exception as e:
             logging.error(f"Błąd pobierania newsów RMF: {e}")
+    return ""
+
+
+def pobierz_nowplaying_dj():
+    if not AZURACAST_URL:
+        return ""
+    try:
+        resp = requests.get(f"{AZURACAST_URL}/api/nowplaying/{AZURACAST_STATION_ID}", timeout=10)
+        if resp.status_code != 200:
+            return ""
+        song = (resp.json().get("now_playing") or {}).get("song") or {}
+        tytul = (song.get("title") or "").strip()
+        wykonawca = (song.get("artist") or "").strip()
+        if wykonawca and tytul:
+            return f"Przed chwilą w Radiu Strefa Zero graliśmy: {wykonawca} — {tytul}. Zostajemy w dobrym klimacie!"
+        if tytul:
+            return f"Przed chwilą w Radiu Strefa Zero poleciał utwór {tytul}. Lecimy dalej!"
+    except Exception as e:
+        logging.warning(f"Błąd nowplaying DJ: {e}")
     return ""
 
 
@@ -291,20 +438,6 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     return None
 
 
-def inteligentna_korekta(tekst):
-    t = tekst.lower()
-    slownik_poprawek = {
-        "zeby": "żeby", "zyczenia": "życzenia", "zycze": "życzę", "zyczymy": "życzymy",
-        "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia", "pozdrawiam": "pozdrawiam",
-        "dzien": "dzień", "urodziny": "urodziny", "imieniny": "imieniny", "dziekuje": "dziękuję",
-        "dzieki": "dzięki", "sie": "się", "ze": "że", "dzis": "dziś", "tez": "też",
-        "wogole": "w ogóle", "narazie": "na razie", "najlepszego": "najlepszego",
-        "caluski": "całuski", "pozdrowionka": "pozdrowionka", "muzyczka": "muzyczka"
-    }
-    poprawione = [slownik_poprawek.get(s.strip(".,!?"), s) for s in t.split()]
-    return " ".join(poprawione)
-
-
 def zbuduj_tylko_godzine(docelowa_godzina_24h):
     slownik_godzin = {
         0: "północ", 1: "pierwsza w nocy", 2: "druga w nocy", 3: "trzecia w nocy",
@@ -313,7 +446,7 @@ def zbuduj_tylko_godzine(docelowa_godzina_24h):
         12: "dwunasta", 13: "trzynasta", 14: "czternasta", 15: "piętnasta",
         16: "szesnasta", 17: "siedemnasta", 18: "osiemnasta", 19: "dziewiętnasta",
         20: "dwudziesta", 21: "dwudziesta pierwsza", 22: "dwudziesta druga",
-        23: "dwudziesta trzecia"
+        23: "dwudziesta trzecia",
     }
     godzina_slownie = slownik_godzin.get(docelowa_godzina_24h, f"godzina {docelowa_godzina_24h}")
     return [("glos", f"Jest godzina {godzina_slownie}. Słuchasz Radia Strefa Zero.")]
@@ -326,7 +459,7 @@ def zbuduj_informacje_rmf():
     return [
         ("glos", "Serwis informacyjny Radia Strefa Zero."),
         ("glos", newsy_rmf),
-        ("glos", f"Słuchaj Radia Strefa Zero. Przypominam darmowy numer SMS: {NUMER_TEL_TEKST}.")
+        ("glos", f"Słuchaj Radia Strefa Zero. Przypominam darmowy numer SMS: {NUMER_TEL_TEKST}."),
     ]
 
 
@@ -335,23 +468,42 @@ def zbuduj_poranny_serwis():
         "Czy wiecie, że muzyka Italo Disco ma swoje korzenie we wczesnych latach osiemdziesiątych i do dziś porywa do tańca?",
         "Dobry humor to połowa sukcesu w każdym dniu. Słuchacie najlepszych hitów w Radiu Strefa Zero!",
         "Warto pamiętać, że pozytywna energia przyciąga dobre rzeczy. Miłego dnia życzy ekipa Radia Strefa Zero!",
-        "Każdy poranek to nowa szansa na świetny bit. Zostawcie dobry nastrój i lećcie z nami przez cały dzień!"
+        "Każdy poranek to nowa szansa na świetny bit. Zostawcie dobry nastrój i lećcie z nami przez cały dzień!",
     ]
     return [
         ("glos", "Witamy w porannym bloku Radia Strefa Zero! Życzymy Wam wspaniałego, pełnego energii dnia."),
         ("glos", random.choice(ciekawostki)),
-        ("glos", f"Zostajcie z nami. Zamawiajcie piosenki darmowym SMS-em na numer: {NUMER_TEL_TEKST}.")
+        ("glos", f"Zostajcie z nami. Zamawiajcie piosenki darmowym SMS-em na numer: {NUMER_TEL_TEKST}."),
     ]
 
 
-def wygeneruj_mix_z_folderu(folder_gatunkowy="muzyka klubowa", liczba_utworow=3, crossfade_ms=5000):
+def _przytnij_cisze(seg: AudioSegment, prog_db: float = -45.0, max_ms: int = 3500) -> AudioSegment:
+    if len(seg) <= 5000:
+        return seg
+    start_ms = min(detect_leading_silence(seg, silence_threshold=prog_db, chunk_size=50), max_ms)
+    end_ms = min(detect_leading_silence(seg.reverse(), silence_threshold=prog_db, chunk_size=50), max_ms)
+    end_idx = len(seg) - end_ms if end_ms > 0 else len(seg)
+    return seg[start_ms:end_idx] if (end_idx - start_ms) >= 4000 else seg
+
+
+def wygeneruj_mix_z_folderu(
+    folder_gatunkowy="muzyka klubowa",
+    liczba_utworow=3,
+    crossfade_ms=5000,
+    folder_docelowy=DIR_MIXY,
+    dzingiel_na_przejsciu=None,
+    sciszenie_db=12.0,
+):
     transport = None
     sftp = None
     lokalne_pobrane = []
     try:
         transport, sftp = polacz_sftp()
         try:
-            pliki = [f for f in sftp.listdir(folder_gatunkowy) if f.lower().endswith(".mp3")]
+            pliki = [
+                f for f in sftp.listdir(folder_gatunkowy)
+                if f.lower().endswith(".mp3") and not f.startswith("mix_")
+            ]
         except Exception as e:
             logging.error(f"Nie można odczytać folderu '{folder_gatunkowy}' dla mixu: {e}")
             return None
@@ -362,7 +514,7 @@ def wygeneruj_mix_z_folderu(folder_gatunkowy="muzyka klubowa", liczba_utworow=3,
 
         wybrane = random.sample(pliki, min(liczba_utworow, len(pliki)))
         for idx, nazwa_mp3 in enumerate(wybrane):
-            lok_path = os.path.join(FOLDER_ROBOCZY, f"mix_src_{idx}{re.sub(r'[^a-zA-Z0-9.-]', '_', nazwa_mp3)}")
+            lok_path = os.path.join(FOLDER_ROBOCZY, f"mix_src_{idx}_{re.sub(r'[^a-zA-Z0-9._-]', '_', nazwa_mp3)}")
             sftp.get(f"{folder_gatunkowy}/{nazwa_mp3}", lok_path)
             if os.path.exists(lok_path) and os.path.getsize(lok_path) > 10000:
                 lokalne_pobrane.append(lok_path)
@@ -370,10 +522,20 @@ def wygeneruj_mix_z_folderu(folder_gatunkowy="muzyka klubowa", liczba_utworow=3,
         if len(lokalne_pobrane) < 2:
             return None
 
-        mix_audio = AudioSegment.from_file(lokalne_pobrane[0]).normalize()
-        for sciezka_next in lokalne_pobrane[1:]:
-            next_audio = AudioSegment.from_file(sciezka_next).normalize()
-            efektywny_xfade = min(crossfade_ms, len(mix_audio) // 3, len(next_audio) // 3)
+        dj_seg = None
+        if dzingiel_na_przejsciu and os.path.exists(dzingiel_na_przejsciu):
+            dj_seg = effects.normalize(AudioSegment.from_file(dzingiel_na_przejsciu)).fade_in(200).fade_out(250)
+
+        mix_audio = effects.normalize(_przytnij_cisze(AudioSegment.from_file(lokalne_pobrane[0]))).fade_in(250).fade_out(250)
+        for idx, sciezka_next in enumerate(lokalne_pobrane[1:], start=1):
+            next_audio = effects.normalize(_przytnij_cisze(AudioSegment.from_file(sciezka_next))).fade_in(250).fade_out(250)
+
+            if dj_seg is not None and idx % 2 == 1 and len(mix_audio) > len(dj_seg) + 1200:
+                dl_dj = min(len(dj_seg), 4500)
+                ogon = mix_audio[-dl_dj:] - abs(float(sciszenie_db))
+                mix_audio = mix_audio[:-dl_dj] + ogon.overlay(dj_seg[:dl_dj])
+
+            efektywny_xfade = min(int(crossfade_ms), len(mix_audio) // 3, len(next_audio) // 3)
             if efektywny_xfade > 500:
                 mix_audio = mix_audio.append(next_audio, crossfade=efektywny_xfade)
             else:
@@ -386,7 +548,8 @@ def wygeneruj_mix_z_folderu(folder_gatunkowy="muzyka klubowa", liczba_utworow=3,
         sciezka_mixu = os.path.join(FOLDER_ROBOCZY, nazwa_mixu)
         mix_audio.export(sciezka_mixu, format="mp3", bitrate="192k")
 
-        zdalna_sciezka = f"{DIR_MIXY}/{nazwa_mixu}"
+        cel_folder = folder_docelowy if folder_docelowy in WSZYSTKIE_FOLDERY_SFTP else DIR_MIXY
+        zdalna_sciezka = f"{cel_folder}/{nazwa_mixu}"
         wyslij_i_zsynchronizuj(sftp, sciezka_mixu, zdalna_sciezka)
         if os.path.exists(sciezka_mixu):
             os.remove(sciezka_mixu)
@@ -450,7 +613,17 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         transport, sftp = polacz_sftp()
         teraz = datetime.now(STREFA_EUROPA)
         znacznik_czasu = teraz.strftime("%Y%m%d_%H%M%S")
+        czy_noc = teraz.hour >= 22 or teraz.hour < 6
+        profil = PULA_BOTOW["marek_noc"] if czy_noc else PULA_BOTOW["marek_standard"]
+
         t_low = tresc_sms.lower()
+        glosy = _wczytaj_glosy()
+        if "dyskoteka" in t_low:
+            glosy["DYSKOTEKA"] += 1
+            _zapisz_glosy(glosy)
+        elif "italo" in t_low:
+            glosy["ITALO"] += 1
+            _zapisz_glosy(glosy)
 
         if "koncert" in t_low:
             typ_audycji = "koncert"
@@ -465,9 +638,9 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             r"(?i)^koncert\s*zyczen[:\-\s]*",
             r"(?i)^piosenka\s*na\s*życzenie[:\-\s]*",
             r"(?i)^piosenka\s*na\s*zyczenie[:\-\s]*",
-            r"(?i)wyślij\s*sms[^\.\,\!][\.\,\!\s]",
-            r"(?i)zamów\s*piosenkę[^\.\,\!][\.\,\!\s]",
-            r"(?i)zamow\s*piosenke[^\.\,\!][\.\,\!\s]",
+            r"(?i)wyślij\s*sms[^\.\,\!]*[\.\,\!\s]*",
+            r"(?i)zamów\s*piosenkę[^\.\,\!]*[\.\,\!\s]*",
+            r"(?i)zamow\s*piosenke[^\.\,\!]*[\.\,\!\s]*",
         ]
         for wzorzec in wzorce_do_wyciecia:
             czysta_tresc = re.sub(wzorzec, "", czysta_tresc)
@@ -494,23 +667,30 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                     pobrano_nowy_utwor = True
                     logging.info(f"Pobrano i wysłano utwór '{zapytanie_muzyczne}' do '{zdalna_piosenka}'.")
 
-        poprawiona_tresc = inteligentna_korekta(czysta_tresc)
+        poprawiona_tresc = inteligentna_korekta(czysta_tresc, czy_sms=True)
 
         if typ_audycji == "koncert":
             kwestie_audio = [
                 ("glos", f"Mamy zgłoszenie do Koncertu Życzeń od słuchacza: {imie_nadawcy}."),
                 ("glos", f"Treść: {poprawiona_tresc}."),
-                ("glos", f"Wyślij SMS na numer: {NUMER_TEL_TEKST}. Gramy w Radiu Strefa Zero!")
+                ("glos", f"Wyślij SMS na numer: {NUMER_TEL_TEKST}. Gramy w Radiu Strefa Zero!"),
             ]
         else:
             kwestie_audio = [
                 ("glos", f"Piosenka na Życzenie od: {imie_nadawcy}."),
                 ("glos", f"Pozdrowienia: {poprawiona_tresc}."),
-                ("glos", f"Zamawiaj pod numerem: {NUMER_TEL_TEKST}. Radio Strefa Zero!")
+                ("glos", f"Zamawiaj pod numerem: {NUMER_TEL_TEKST}. Radio Strefa Zero!"),
             ]
 
         nazwa_glosu = f"wiadomosc_{znacznik_czasu}.mp3"
-        lokalny_glos = generuj_audio_mp3(kwestie_audio, nazwa_glosu)
+        lokalny_glos = generuj_audio_mp3(
+            kwestie_audio,
+            nazwa_glosu,
+            glos=profil["voice"],
+            pitch=profil["pitch"],
+            rate=profil["rate"],
+            czy_sms=True,
+        )
 
         if lokalny_glos and os.path.exists(lokalny_glos):
             zdalny_glos = f"{folder_docelowy}/{nazwa_glosu}"
@@ -537,10 +717,10 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
                 pass
 
 
-@app.route("/sms", methods=["POST"])
+@app.route("/sms", methods=["POST", "GET"])
 def webhook_sms():
-    tresc_sms = request.form.get("Body", "").strip()
-    numer_nadawcy = request.form.get("From", "").strip()
+    tresc_sms = (request.values.get("Body") or request.values.get("text") or request.values.get("message") or "").strip()
+    numer_nadawcy = (request.values.get("From") or request.values.get("sender") or "").strip()
     if tresc_sms:
         threading.Thread(target=przetworz_sms_w_tle, args=(tresc_sms, numer_nadawcy), daemon=True).start()
     return "<Response></Response>", 200
@@ -573,13 +753,39 @@ def endpoint_generuj_mix():
     folder_gatunek = request.values.get("folder", "muzyka klubowa")
     if folder_gatunek not in FOLDERY_GATUNKOWE:
         folder_gatunek = "muzyka klubowa"
+    folder_docelowy = request.values.get("target_folder", DIR_MIXY)
+    if folder_docelowy not in WSZYSTKIE_FOLDERY_SFTP:
+        folder_docelowy = DIR_MIXY
     try:
-        liczba = int(request.values.get("count", "3"))
+        liczba = max(2, min(8, int(request.values.get("count", "3"))))
     except ValueError:
         liczba = 3
-    liczba = max(2, min(liczba, 8))
+    try:
+        crossfade_ms = max(500, min(10000, int(request.values.get("crossfade_ms", "5000"))))
+    except ValueError:
+        crossfade_ms = 5000
+    try:
+        duck_db = max(3.0, min(24.0, float(request.values.get("duck_db", "12"))))
+    except ValueError:
+        duck_db = 12.0
 
-    zdalna = wygeneruj_mix_z_folderu(folder_gatunkowy=folder_gatunek, liczba_utworow=liczba)
+    dzingiel_kandydat = next(
+        (
+            os.path.join(DIR_STATIC_OUTPUT, n)
+            for n in sorted(os.listdir(DIR_STATIC_OUTPUT), reverse=True)
+            if n.endswith(".mp3")
+        ),
+        None,
+    )
+
+    zdalna = wygeneruj_mix_z_folderu(
+        folder_gatunkowy=folder_gatunek,
+        liczba_utworow=liczba,
+        crossfade_ms=crossfade_ms,
+        folder_docelowy=folder_docelowy,
+        dzingiel_na_przejsciu=dzingiel_kandydat,
+        sciszenie_db=duck_db,
+    )
     if zdalna:
         return jsonify({"status": "success", "remote_file": zdalna, "folder": folder_gatunek}), 200
     return jsonify({"status": "error", "message": f"Nie udało się wygenerować mixu z '{folder_gatunek}'."}), 400
@@ -629,8 +835,8 @@ SZABLON_JINGLES = """
     <title>Radio Strefa Zero - Generator AI, Reklamy i Mixy</title>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; padding: 30px; }
-        .container { max-width: 720px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        textarea, select, input[type=datetime-local] { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 18px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 5px; box-sizing: border-box; }
+        .container { max-width: 740px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        textarea, select, input[type=datetime-local], input[type=number] { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 16px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 5px; box-sizing: border-box; }
         input[type=range] { width: 100%; margin-top: 5px; margin-bottom: 15px; background: #2d2d2d; }
         button { background: #ff4757; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:hover { background: #ff6b81; }
@@ -658,37 +864,41 @@ SZABLON_JINGLES = """
         <h2>🎛️ Radio Strefa Zero - Generator AI, Reklamy i Mixy</h2>
         
         <div class="info-box">
-            🎚️ Wybierz folder docelowy (w tym <b>blok reklamowy</b> z terminem ważności), głos, ustaw suwaki Pitch i Rate i wyślij plik prosto na serwer SFTP.
+            🎚️ Wybierz folder docelowy (w tym <b>blok reklamowy</b> z terminem ważności), bota/głos, ustaw Pitch i Rate i wyślij plik na SFTP. Bot automatycznie poskłada rozstrzelone litery i poprawi literówki.
         </div>
 
         <div style="margin-bottom: 14px;">
-            <span style="font-size: 13px; color: #aaa; display: block; margin-bottom: 6px;">Szybkie szablony zapowiedzi (bez monotonii):</span>
+            <span style="font-size: 13px; color: #aaa; display: block; margin-bottom: 6px;">Szybkie szablony zapowiedzi:</span>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Cofamy się w czasie do złotych lat osiemdziesiątych i dziewięćdziesiątych. Posłuchajcie, co wtedy rozgrzewało parkiety w Radiu Strefa Zero!')">🕰️ Kapsuła Czasu</button>
-            <button type="button" class="btn-preset" onclick="wstawSzablon('Starcie gatunków w Radiu Strefa Zero! Co wolisz na kolejnym bloku – energetyczne disco polo czy klasyczne italo disco? Zamawiajcie i bawcie się razem z nami!')">⚔️ Bitwa Gatunków</button>
+            <button type="button" class="btn-preset" onclick="wstawSzablon('Starcie gatunków w Radiu Strefa Zero! Co wolisz na kolejnym bloku – energetyczne disco polo czy klasyczne italo disco?')">⚔️ Bitwa Gatunków</button>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Nocne pasmo w Radiu Strefa Zero. Głęboki bit, zero pośpiechu i muzyka, która trzyma na nogach do rana.')">🌙 Nocny Klimat</button>
         </div>
         
         <form id="generatorForm">
             <label>Tekst zapowiedzi / dżingla / bloku reklamowego:</label>
-            <textarea name="text" id="text" rows="4" placeholder="Np. Słuchasz Radio Strefa Zero! Najlepsza muzyka klubowa i disco polo!"></textarea>
+            <textarea name="text" id="text" rows="4" placeholder="Np. Słuchasz Radio Strefa Zero albo m u l t l s c..."></textarea>
             
             <label>📂 Wybierz folder docelowy na serwerze (AzuraCast):</label>
             <select name="target_folder" id="target_folder" onchange="toggleExpireBox()">
-                <option value="jingles">jingles (Dżingle / Oprawa)</option>
-                <option value="blok reklamowy">blok reklamowy (Reklamy z terminem ważności)</option>
-                <option value="Koncert zyczen">Koncert zyczen (Koncert Życzeń)</option>
-                <option value="piosenka na zyczenie">piosenka na zyczenie (Piosenka na życzenie)</option>
-                <option value="news">news (Serwis informacyjny)</option>
-                <option value="godzina">godzina (Zapowiedzi pełnej godziny)</option>
+                {% for f in all_folders %}
+                    <option value="{{ f }}">{{ f }}</option>
+                {% endfor %}
             </select>
 
             <div id="expireBox" class="hidden">
-                <label>⏳ Termin ważności reklamy (po tym czasie bot sam usunie plik z serwera):</label>
+                <label>⏳ Termin ważności reklamy:</label>
                 <input type="datetime-local" name="expires_at" id="expires_at">
             </div>
 
+            <label>Wybierz profil bota z puli:</label>
+            <select id="bot_preset" onchange="zastosujProfilBota()">
+                {% for k, cfg in bot_pool.items() %}
+                    <option value="{{ k }}" data-voice="{{ cfg.voice }}" data-pitch="{{ cfg.pitch }}" data-rate="{{ cfg.rate }}">{{ cfg.name }}</option>
+                {% endfor %}
+            </select>
+
             <label>Wybierz głos lektora:</label>
-            <select name="voice">
+            <select name="voice" id="voice_select">
                 <optgroup label="Głosy Męskie (Radiowe / Basowe)">
                     <option value="pl-PL-MarekNeural">Marek (Głęboki / Radiowy)</option>
                     <option value="pl-PL-AndrzejNeural">Andrzej (Dynamiczny / Młody)</option>
@@ -760,14 +970,27 @@ SZABLON_JINGLES = """
         </div>
 
         <div class="box-section">
-            <h3>🎧 Automatyczny DJ – Generuj Mix z Folderu</h3>
+            <h3>🎧 Automatyczny DJ – Szybki Mikser (Crossfade + Wstawka) -> SFTP</h3>
             <label>Wybierz folder gatunkowy do zmiksowania:</label>
             <select id="mixFolder">
                 {% for folder in genre_folders %}
                     <option value="{{ folder }}">{{ folder }}</option>
                 {% endfor %}
             </select>
-            <button type="button" class="btn-mix" onclick="generujMix()">Zmiksuj Utwory i Wyślij do 'mixy' 🎚️</button>
+
+            <label>Liczba utworów (2 - 8):</label>
+            <input type="number" id="mixCount" value="3" min="2" max="8">
+
+            <label>Crossfade (ms, np. 5000 = 5s):</label>
+            <input type="number" id="mixCrossfade" value="5000" min="500" max="10000" step="250">
+
+            <label>Folder docelowy SFTP:</label>
+            <select id="mixTarget">
+                <option value="mixy" selected>mixy</option>
+                <option value="muzyka mix">muzyka mix</option>
+            </select>
+
+            <button type="button" class="btn-mix" onclick="generujMix()">Składaj Miks i Wyślij na SFTP 🎚️</button>
             <div id="mixStatus" style="margin-top: 12px; font-weight: bold; text-align: center;"></div>
         </div>
 
@@ -780,6 +1003,16 @@ SZABLON_JINGLES = """
     <script>
         function wstawSzablon(txt) {
             document.getElementById('text').value = txt;
+        }
+        function zastosujProfilBota() {
+            const sel = document.getElementById('bot_preset');
+            const opt = sel.options[sel.selectedIndex];
+            if (!opt) return;
+            document.getElementById('voice_select').value = opt.dataset.voice;
+            document.getElementById('pitch').value = opt.dataset.pitch;
+            document.getElementById('rate').value = opt.dataset.rate;
+            updatePitch(opt.dataset.pitch);
+            updateRate(opt.dataset.rate);
         }
         function updatePitch(val) {
             let num = parseInt(val);
@@ -857,12 +1090,15 @@ SZABLON_JINGLES = """
 
         async function generujMix() {
             const folder = document.getElementById('mixFolder').value;
+            const count = document.getElementById('mixCount').value;
+            const crossfade_ms = document.getElementById('mixCrossfade').value;
+            const target_folder = document.getElementById('mixTarget').value;
             const mixStatus = document.getElementById('mixStatus');
             mixStatus.style.color = '#fff';
             mixStatus.innerText = '⏳ Trwa miksowanie utworów z folderu ' + folder + '...';
 
             try {
-                const params = new URLSearchParams({ folder: folder, count: '3' });
+                const params = new URLSearchParams({ folder, count, crossfade_ms, target_folder });
                 const res = await fetch('/generuj-mix?' + params.toString());
                 const data = await res.json();
                 if (data.status === 'success') {
@@ -891,7 +1127,7 @@ def sprawdz_i_pobierz_podklady():
             "01_bit_klubowy_dance.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
             "02_bit_dyskotekowy_retro.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
             "03_bit_house_energetyczny.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-            "04_bit_techno_mocny.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+            "04_bit_techno_mocny.mp3": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
         }
         for nazwa, url in domyslne_bity.items():
             sciezka_docelowa = os.path.join(DIR_STATIC_MUSIC, nazwa)
@@ -932,8 +1168,10 @@ def panel_jingles():
         SZABLON_JINGLES,
         music_files=sorted(music_files),
         genre_folders=FOLDERY_GATUNKOWE,
+        all_folders=WSZYSTKIE_FOLDERY_SFTP,
+        bot_pool=PULA_BOTOW,
         active_ads=sformatowane_reklamy,
-        recent_logs=pobierz_ostatnie_logi(25)
+        recent_logs=pobierz_ostatnie_logi(25),
     )
 
 
@@ -946,15 +1184,7 @@ def endpoint_generuj_jingle_ai():
     target_folder = request.form.get("target_folder", "jingles")
     expires_at_raw = request.form.get("expires_at", "").strip()
 
-    dopuszczalne_foldery = {
-        "jingles": DIR_JINGLES,
-        "blok reklamowy": DIR_BLOK_REKLAMOWY,
-        "Koncert zyczen": DIR_KONCERT_ZYCZEN,
-        "piosenka na zyczenie": DIR_PIOSENKA_NA_ZYCZENIE,
-        "news": DIR_NEWS,
-        "godzina": DIR_GODZINA,
-    }
-    zdalny_katalog = dopuszczalne_foldery.get(target_folder, DIR_JINGLES)
+    zdalny_katalog = target_folder if target_folder in WSZYSTKIE_FOLDERY_SFTP else DIR_JINGLES
 
     try:
         p_val = max(-35, min(15, int(request.form.get("pitch", "-12"))))
@@ -968,7 +1198,8 @@ def endpoint_generuj_jingle_ai():
     except ValueError:
         rate_str = "+0%"
 
-    if not text:
+    oczyszczony_tekst = inteligentna_korekta(text)
+    if not oczyszczony_tekst:
         return jsonify({"status": "error", "message": "Tekst jest pusty!"}), 400
 
     znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
@@ -979,7 +1210,7 @@ def endpoint_generuj_jingle_ai():
     final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
 
     try:
-        uruchom_async(async_generuj_edge_tts(text, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
+        uruchom_async(async_generuj_edge_tts(oczyszczony_tekst, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
 
         if not os.path.exists(speech_file):
             return jsonify({"status": "error", "message": "Nie udało się wygenerować mowy."}), 500
@@ -1032,9 +1263,9 @@ def endpoint_generuj_jingle_ai():
 
         return jsonify({
             "status": "success",
-            "folder": target_folder,
+            "folder": zdalny_katalog,
             "expires_at": zapisany_termin,
-            "file_url": f"/static/output/{nazwa_pliku}"
+            "file_url": f"/static/output/{nazwa_pliku}",
         })
 
     except Exception as e:
@@ -1046,7 +1277,7 @@ def endpoint_generuj_jingle_ai():
 def index_glowna():
     return """
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>Pełny system automatyzacji radia, zegara z wyprzedzeniem, reklam z terminem i mixów działa.</p>
+    <p>Pełny system automatyzacji radia, zegara z wyprzedzeniem, reklam z terminem, puli botów i mixów działa.</p>
     <ul>
         <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser i Logi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny</a></li>
@@ -1055,7 +1286,49 @@ def index_glowna():
     """
 
 
-def petla_zegara_i_emisji():
+def _wykonaj_wstawke_i_wyslij(kwestie, folder_sftp, nazwa_pliku, bot_key="marek_standard"):
+    profil = PULA_BOTOW.get(bot_key, PULA_BOTOW["marek_standard"])
+    lokalny = generuj_audio_mp3(kwestie, nazwa_pliku, glos=profil["voice"], pitch=profil["pitch"], rate=profil["rate"])
+    if not lokalny or not os.path.exists(lokalny):
+        return False
+    transport = None
+    sftp = None
+    try:
+        transport, sftp = polacz_sftp()
+        sftp.put(lokalny, f"{folder_sftp}/{nazwa_pliku}")
+        logging.info(f"Wysłano automatyczną wstawkę do '{folder_sftp}/{nazwa_pliku}'.")
+        return True
+    finally:
+        if os.path.exists(lokalny):
+            try:
+                os.remove(lokalny)
+            except Exception:
+                pass
+        if sftp:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+        if transport:
+            try:
+                transport.close()
+            except Exception:
+                pass
+
+
+_klucze_minuty = set()
+
+
+def _raz_na_minute(klucz: str) -> bool:
+    if klucz in _klucze_minuty:
+        return False
+    _klucze_minuty.add(klucz)
+    if len(_klucze_minuty) > 800:
+        _klucze_minuty.clear()
+    return True
+
+
+def petla_harmonogramu_w_tle():
     ostatnia_zapowiedziana_godzina = -1
     ostatni_mix_godzina = -1
     ostatnie_czyszczenie_ts = 0
@@ -1064,6 +1337,10 @@ def petla_zegara_i_emisji():
         try:
             teraz = datetime.now(STREFA_EUROPA)
             obecny_ts = time.time()
+            hhmm = teraz.strftime("%H:%M")
+            klucz_min = teraz.strftime("%Y-%m-%d %H:%M")
+            czy_noc = teraz.hour >= 22 or teraz.hour < 6
+            czy_weekend = teraz.weekday() in (4, 5, 6)
 
             if obecny_ts - ostatnie_czyszczenie_ts > 300:
                 transport = None
@@ -1134,7 +1411,7 @@ def petla_zegara_i_emisji():
                             kwestie_info = zbuduj_informacje_rmf()
                             if kwestie_info:
                                 nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                                sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info)
+                                sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
                                 if sciezka_i and os.path.exists(sciezka_i):
                                     sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
                                     os.remove(sciezka_i)
@@ -1144,7 +1421,7 @@ def petla_zegara_i_emisji():
                         if docelowa_godzina == 7:
                             kwestie_poranek = zbuduj_poranny_serwis()
                             nazwa_poranek = f"poranek_{teraz.strftime('%Y%m%d')}.mp3"
-                            sciezka_por = generuj_audio_mp3(kwestie_poranek, nazwa_poranek)
+                            sciezka_por = generuj_audio_mp3(kwestie_poranek, nazwa_poranek, glos="pl-PL-ZofiaNeural", pitch="-2Hz", rate="+0%")
                             if sciezka_por and os.path.exists(sciezka_por):
                                 sftp.put(sciezka_por, f"{DIR_JINGLES}/{nazwa_poranek}")
                                 os.remove(sciezka_por)
@@ -1154,7 +1431,7 @@ def petla_zegara_i_emisji():
                         if docelowa_godzina == 17:
                             kwestie_koncert = [
                                 ("glos", "Trwa codzienne pasmo Koncertu Życzeń w Radiu Strefa Zero!"),
-                                ("glos", f"Zamawiaj piosenki i wysyłaj pozdrowienia darmowym SMS-em na numer: {NUMER_TEL_TEKST}. Gramy dla Was!")
+                                ("glos", f"Zamawiaj piosenki i wysyłaj pozdrowienia darmowym SMS-em na numer: {NUMER_TEL_TEKST}. Gramy dla Was!"),
                             ]
                             nazwa_pliku_k = f"koncert_zapowiedz_{teraz.strftime('%Y%m%d')}.mp3"
                             sciezka_k = generuj_audio_mp3(kwestie_koncert, nazwa_pliku_k)
@@ -1180,6 +1457,71 @@ def petla_zegara_i_emisji():
 
                     ostatnia_zapowiedziana_godzina = docelowa_godzina
 
+            if czy_noc and teraz.minute == 15 and _raz_na_minute(f"noc_{klucz_min}"):
+                if _wykonaj_wstawke_i_wyslij(
+                    [("glos", "Nocne Radio w Strefie Zero! Klubowe bity trwają całą noc — bawimy się do rana!")],
+                    DIR_WSTAWKI_AI,
+                    f"noc_{teraz.strftime('%H%M')}.mp3",
+                    bot_key="marek_noc",
+                ):
+                    zsynchronizuj_azuracast()
+
+            if hhmm == "12:15" and _raz_na_minute(f"kapsula_{klucz_min}"):
+                lata = [1984, 1986, 1988, 1990, 1993, 1996, 1999]
+                rok = lata[teraz.day % len(lata)]
+                if _wykonaj_wstawke_i_wyslij(
+                    [("glos", f"Kapsuła Czasu w Radiu Strefa Zero! Cofamy się do roku {rok} — sprawdzamy, co wtedy królowało na parkietach!")],
+                    DIR_AUDYCJE_SPECJALNE,
+                    f"kapsula_{teraz.strftime('%Y%m%d')}.mp3",
+                    bot_key="marek_bas",
+                ):
+                    zsynchronizuj_azuracast()
+
+            if teraz.weekday() == 4 and hhmm == "15:30" and _raz_na_minute(f"bitwa_start_{klucz_min}"):
+                if _wykonaj_wstawke_i_wyslij(
+                    [("glos", "Bitwa Gatunków w Radiu Strefa Zero! DYSKOTEKA kontra ITALO DISCO — wyślij SMS DYSKOTEKA albo ITALO!")],
+                    DIR_WSTAWKI_AI,
+                    f"bitwa_start_{teraz.strftime('%Y%m%d')}.mp3",
+                    bot_key="marek_standard",
+                ):
+                    zsynchronizuj_azuracast()
+
+            if teraz.weekday() == 4 and hhmm == "16:30" and _raz_na_minute(f"bitwa_wynik_{klucz_min}"):
+                glosy = _wczytaj_glosy()
+                zwyciezca = (
+                    "Italo Disco" if glosy["ITALO"] > glosy["DYSKOTEKA"]
+                    else ("Disco Polo" if glosy["DYSKOTEKA"] > glosy["ITALO"] else "remis")
+                )
+                tekst_w = (
+                    f"Wynik Bitwy Gatunków w Radiu Strefa Zero: DYSKOTEKA {glosy['DYSKOTEKA']}, "
+                    f"ITALO {glosy['ITALO']}. Wygrywa: {zwyciezca}!"
+                )
+                _zapisz_glosy({"DYSKOTEKA": 0, "ITALO": 0})
+                if _wykonaj_wstawke_i_wyslij([("glos", tekst_w)], DIR_AUDYCJE_SPECJALNE, f"bitwa_wynik_{teraz.strftime('%Y%m%d')}.mp3", bot_key="zofia_standard"):
+                    zsynchronizuj_azuracast()
+
+            if hhmm in ("10:30", "14:30", "19:30") and _raz_na_minute(f"nostalgia_{klucz_min}"):
+                if _wykonaj_wstawke_i_wyslij([("glos", random.choice(KACIK_NOSTALGII))], DIR_WSTAWKI_AI, f"nostalgia_{teraz.strftime('%Y%m%d_%H%M')}.mp3", bot_key="zofia_standard"):
+                    zsynchronizuj_azuracast()
+
+            if hhmm in ("13:20", "17:40", "21:10") and _raz_na_minute(f"kawal_{klucz_min}"):
+                if _wykonaj_wstawke_i_wyslij([("glos", random.choice(KAWALY_TEKSTY))], DIR_WSTAWKI_AI, f"kawal_{teraz.strftime('%Y%m%d_%H%M')}.mp3", bot_key="marek_standard"):
+                    zsynchronizuj_azuracast()
+
+            if czy_weekend and hhmm in ("18:10", "20:10") and _raz_na_minute(f"weekend_{klucz_min}"):
+                if _wykonaj_wstawke_i_wyslij([("glos", random.choice(KACIK_WEEKENDOWY))], DIR_WSTAWKI_AI, f"weekend_{teraz.strftime('%Y%m%d_%H%M')}.mp3", bot_key="marek_bas"):
+                    zsynchronizuj_azuracast()
+
+            if teraz.minute in (5, 35) and _raz_na_minute(f"dj_{klucz_min}"):
+                kom_dj = pobierz_nowplaying_dj()
+                if kom_dj and _wykonaj_wstawke_i_wyslij(
+                    [("glos", kom_dj)],
+                    DIR_WSTAWKI_AI,
+                    f"dj_{teraz.strftime('%Y%m%d_%H%M')}.mp3",
+                    bot_key="marek_noc" if czy_noc else "marek_standard",
+                ):
+                    zsynchronizuj_azuracast()
+
             if teraz.minute == 0 and teraz.hour % 4 == 0 and teraz.hour != ostatni_mix_godzina:
                 folder_na_mix = "muzyka klubowa" if (teraz.hour >= 20 or teraz.hour < 6) else "disco polo dance"
                 wygeneruj_mix_z_folderu(folder_gatunkowy=folder_na_mix, liczba_utworow=3, crossfade_ms=5000)
@@ -1191,9 +1533,9 @@ def petla_zegara_i_emisji():
         time.sleep(15)
 
 
-watek_tlo = threading.Thread(target=petla_zegara_i_emisji, daemon=True)
+watek_tlo = threading.Thread(target=petla_harmonogramu_w_tle, daemon=True)
 watek_tlo.start()
 logging.info(">>> Wątek automatyczny radia został uruchomiony! <<<")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)
