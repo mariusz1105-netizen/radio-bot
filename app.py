@@ -550,6 +550,11 @@ def wygeneruj_mix_z_folderu(
     try:
         transport, sftp = polacz_sftp()
         try:
+            logging.info(f"SFTP cwd={sftp.getcwd()} | root={sftp.listdir('.')}")
+        except Exception as e_dbg:
+            logging.info(f"SFTP debug info: {e_dbg}")
+
+        try:
             pliki = [
                 f for f in sftp.listdir(folder_gatunkowy)
                 if f.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and not f.startswith("mix_")
