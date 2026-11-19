@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime
 import json
 import logging
 import os
@@ -502,7 +504,7 @@ def wygeneruj_mix_z_folderu(
         try:
             pliki = [
                 f for f in sftp.listdir(folder_gatunkowy)
-                if f.lower().endswith(".mp3") and not f.startswith("mix_")
+                if f.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and not f.startswith("mix_")
             ]
         except Exception as e:
             logging.error(f"Nie można odczytać folderu '{folder_gatunkowy}' dla mixu: {e}")
@@ -516,7 +518,7 @@ def wygeneruj_mix_z_folderu(
         for idx, nazwa_mp3 in enumerate(wybrane):
             lok_path = os.path.join(FOLDER_ROBOCZY, f"mix_src_{idx}_{re.sub(r'[^a-zA-Z0-9._-]', '_', nazwa_mp3)}")
             sftp.get(f"{folder_gatunkowy}/{nazwa_mp3}", lok_path)
-            if os.path.exists(lok_path) and os.path.getsize(lok_path) > 10000:
+            if os.path.exists(lok_path) and os.path.getsize(lok_path) > 1024:
                 lokalne_pobrane.append(lok_path)
 
         if len(lokalne_pobrane) < 2:
