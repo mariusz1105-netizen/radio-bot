@@ -547,6 +547,7 @@ def wygeneruj_mix_z_folderu(
     transport = None
     sftp = None
     lokalne_pobrane = []
+    max_dlugosc_utworu_ms = 60000
     try:
         transport, sftp = polacz_sftp()
         try:
@@ -579,11 +580,16 @@ def wygeneruj_mix_z_folderu(
 
         dj_seg = None
         if dzingiel_na_przejsciu and os.path.exists(dzingiel_na_przejsciu):
-            dj_seg = effects.normalize(AudioSegment.from_file(dzingiel_na_przejsciu)).fade_in(200).fade_out(250)
+            dj_seg = AudioSegment.from_file(dzingiel_na_przejsciu)[:5000].fade_in(200).fade_out(250)
 
-        mix_audio = effects.normalize(_przytnij_cisze(AudioSegment.from_file(lokalne_pobrane[0]))).fade_in(250).fade_out(250)
+        seg0 = _przytnij_cisze(AudioSegment.from_file(lokalne_pobrane[0])[:max_dlugosc_utworu_ms])
+        mix_audio = seg0.fade_in(250).fade_out(250)
+        del seg0
+
         for idx, sciezka_next in enumerate(lokalne_pobrane[1:], start=1):
-            next_audio = effects.normalize(_przytnij_cisze(AudioSegment.from_file(sciezka_next))).fade_in(250).fade_out(250)
+            seg_n = _przytnij_cisze(AudioSegment.from_file(sciezka_next)[:max_dlugosc_utworu_ms])
+            next_audio = seg_n.fade_in(250).fade_out(250)
+            del seg_n
 
             if dj_seg is not None and idx % 2 == 1 and len(mix_audio) > len(dj_seg) + 1200:
                 dl_dj = min(len(dj_seg), 4500)
@@ -595,13 +601,14 @@ def wygeneruj_mix_z_folderu(
                 mix_audio = mix_audio.append(next_audio, crossfade=efektywny_xfade)
             else:
                 mix_audio = mix_audio + next_audio
+            del next_audio
 
-        mix_audio = effects.normalize(mix_audio)
         znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
         czysta_nazwa_folderu = re.sub(r"[^a-zA-Z0-9_-]", "_", folder_gatunkowy)
         nazwa_mixu = f"mix_{czysta_nazwa_folderu}_{znacznik}.mp3"
         sciezka_mixu = os.path.join(FOLDER_ROBOCZY, nazwa_mixu)
-        mix_audio.export(sciezka_mixu, format="mp3", bitrate="192k")
+        mix_audio.export(sciezka_mixu, format="mp3", bitrate="128k")
+        del mix_audio
 
         cel_folder = folder_docelowy if folder_docelowy in WSZYSTKIE_FOLDERY_SFTP else DIR_MIXY
         zdalna_sciezka = f"{cel_folder}/{nazwa_mixu}"
