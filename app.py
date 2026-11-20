@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import re
+import subprocess
 import threading
 import time
 from urllib.parse import quote
@@ -48,8 +49,11 @@ AZURACAST_URL = os.environ.get("AZURACAST_URL", "https://a7.asurahosting.com").r
 AZURACAST_API_KEY = os.environ.get("AZURACAST_API_KEY", "")
 AZURACAST_STATION_ID = int(os.environ.get("AZURACAST_STATION_ID", 461))
 
+# Stały głos ElevenLabs (wybierasz raz w panelu ElevenLabs i wklejasz VOICE_ID do env)
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+ELEVENLABS_VOICE_ID_LOW = os.environ.get("ELEVENLABS_VOICE_ID_LOW", "").strip()
+ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
 
 DIR_JINGLES = "jingles"
 DIR_MAGAZYN = "magazyn_zyczen"
@@ -148,184 +152,56 @@ NOCNE_WEJSCIA_KLUBOWE = [
 DOZWOLONE_SKROTY = {"DJ", "FM", "MP3", "SMS", "TV", "VIP", "AI", "URL", "API", "SFTP", "BPM", "RSS", "TTS", "HQ", "HD"}
 
 SLOWNIK_POLSKICH_SLOW = {
-    "zeby": "żeby",
-    "zyczenia": "życzenia",
-    "zyczenie": "życzenie",
-    "zyczen": "życzeń",
-    "zycze": "życzę",
-    "zyczymy": "życzymy",
-    "pozdrowienia": "pozdrowienia",
-    "pozdro": "pozdrowienia",
-    "pozdrawiam": "pozdrawiam",
-    "pozdrawiamy": "pozdrawiamy",
-    "dzien": "dzień",
-    "dzisiaj": "dzisiaj",
-    "dzis": "dziś",
-    "jutro": "jutro",
-    "wczoraj": "wczoraj",
-    "wieczor": "wieczór",
-    "wieczorem": "wieczorem",
-    "noca": "nocą",
-    "nocne": "nocne",
-    "nocny": "nocny",
-    "nocna": "nocna",
-    "rano": "rano",
-    "polnoc": "północ",
-    "poludnie": "południe",
-    "godzina": "godzina",
-    "godzine": "godzinę",
-    "godziny": "godziny",
-    "muzyka": "muzyka",
-    "muzyke": "muzykę",
-    "muzyki": "muzyki",
-    "muzyczka": "muzyczka",
-    "klubowa": "klubowa",
-    "klubowy": "klubowy",
-    "klubowe": "klubowe",
-    "piosenka": "piosenka",
-    "piosenke": "piosenkę",
-    "piosenki": "piosenki",
-    "piosenek": "piosenek",
-    "utwor": "utwór",
-    "utworze": "utworze",
-    "utwory": "utwory",
-    "wykonawca": "wykonawca",
-    "wykonawce": "wykonawcę",
-    "wykonawcy": "wykonawcy",
-    "tytul": "tytuł",
-    "tytulu": "tytułu",
-    "tytuly": "tytuły",
-    "sluchacz": "słuchacz",
-    "sluchacza": "słuchacza",
-    "sluchacze": "słuchacze",
-    "sluchaczy": "słuchaczy",
-    "sluchasz": "słuchasz",
-    "sluchaj": "słuchaj",
-    "sluchajcie": "słuchajcie",
-    "dziekuje": "dziękuję",
-    "dziekujemy": "dziękujemy",
-    "dzieki": "dzięki",
-    "prosze": "proszę",
-    "urodziny": "urodziny",
-    "urodzin": "urodzin",
-    "imieniny": "imieniny",
-    "imienin": "imienin",
-    "mozna": "można",
-    "moze": "może",
-    "moga": "mogą",
-    "trzeba": "trzeba",
-    "zrobic": "zrobić",
-    "zrobione": "zrobione",
-    "zagrac": "zagrać",
-    "zagramy": "zagramy",
-    "gramy": "gramy",
-    "gralismy": "graliśmy",
-    "gralamy": "grałyśmy",
-    "puscic": "puścić",
-    "puscimy": "puścimy",
-    "leci": "leci",
-    "lecialo": "leciało",
-    "leciala": "leciała",
-    "lecialy": "leciały",
-    "bedzie": "będzie",
-    "beda": "będą",
-    "jestes": "jesteś",
-    "jestescie": "jesteście",
-    "ktos": "ktoś",
-    "cos": "coś",
-    "nic": "nic",
-    "nigdzie": "nigdzie",
-    "zawsze": "zawsze",
-    "czasem": "czasem",
-    "czesto": "często",
-    "bardzo": "bardzo",
-    "duzo": "dużo",
-    "malo": "mało",
-    "troche": "trochę",
-    "fajnie": "fajnie",
-    "swietnie": "świetnie",
-    "wspanialego": "wspaniałego",
-    "wspanialy": "wspaniały",
-    "wspaniala": "wspaniała",
-    "najlepszego": "najlepszego",
-    "najlepsze": "najlepsze",
-    "najlepszych": "najlepszych",
-    "caluski": "całuski",
-    "pozdrowionka": "pozdrowionka",
-    "impreza": "impreza",
-    "imprezie": "imprezie",
-    "imprezowy": "imprezowy",
-    "parkiet": "parkiet",
-    "parkiecie": "parkiecie",
-    "parkiety": "parkiety",
-    "bitwa": "bitwa",
-    "bitwy": "bitwy",
-    "gatunkow": "gatunków",
-    "kapsula": "kapsuła",
-    "kapsule": "kapsułę",
-    "czasu": "czasu",
-    "kawaly": "kawały",
-    "kawalu": "kawału",
-    "kawale": "kawale",
-    "ciekawostki": "ciekawostki",
-    "ciekawostek": "ciekawostek",
-    "nostalgia": "nostalgia",
-    "nostalgii": "nostalgii",
-    "radiu": "radiu",
-    "radia": "radia",
-    "strefa": "strefa",
-    "strefie": "strefie",
-    "zero": "zero",
-    "zerze": "zerze",
-    "sie": "się",
-    "ze": "że",
-    "tez": "też",
-    "wiecej": "więcej",
-    "jesli": "jeśli",
-    "jezeli": "jeżeli",
-    "wogole": "w ogóle",
-    "narazie": "na razie",
-    "poprostu": "po prostu",
-    "naprawde": "naprawdę",
-    "napewno": "na pewno",
-    "odrazu": "od razu",
-    "wsumie": "w sumie",
-    "niewiem": "nie wiem",
-    "nwm": "nie wiem",
-    "wszystko": "wszystko",
-    "wszystkiego": "wszystkiego",
-    "wszyscy": "wszyscy",
-    "wszystkich": "wszystkich",
-    "ktory": "który",
-    "ktora": "która",
-    "ktore": "które",
-    "ktorych": "których",
-    "ktorego": "którego",
-    "tez": "też",
-    "darmowy": "darmowy",
-    "darmowym": "darmowym",
-    "numer": "numer",
-    "numerem": "numerem",
-    "wyslij": "wyślij",
-    "wyslac": "wysłać",
-    "zamawiaj": "zamawiaj",
-    "zamawiajcie": "zamawiajcie",
-    "zamow": "zamów",
-    "zamowic": "zamówić",
-    "zwyciezca": "zwycięzca",
-    "zwyciezcy": "zwycięzcy",
-    "wygrywa": "wygrywa",
-    "remis": "remis",
-    "wspomnienia": "wspomnienia",
-    "sprawdzamy": "sprawdzamy",
-    "sprawdz": "sprawdź",
-    "energia": "energia",
-    "energii": "energii",
-    "klimat": "klimat",
-    "klimacie": "klimacie",
-    "przelot": "przelot",
-    "zmiana": "zmiana",
-    "zmiane": "zmianę",
+    "zeby": "żeby", "zyczenia": "życzenia", "zyczenie": "życzenie", "zyczen": "życzeń",
+    "zycze": "życzę", "zyczymy": "życzymy", "pozdrowienia": "pozdrowienia", "pozdro": "pozdrowienia",
+    "pozdrawiam": "pozdrawiam", "pozdrawiamy": "pozdrawiamy", "dzien": "dzień", "dzisiaj": "dzisiaj",
+    "dzis": "dziś", "jutro": "jutro", "wczoraj": "wczoraj", "wieczor": "wieczór",
+    "wieczorem": "wieczorem", "noca": "nocą", "nocne": "nocne", "nocny": "nocny",
+    "nocna": "nocna", "rano": "rano", "polnoc": "północ", "poludnie": "południe",
+    "godzina": "godzina", "godzine": "godzinę", "godziny": "godziny", "muzyka": "muzyka",
+    "muzyke": "muzykę", "muzyki": "muzyki", "muzyczka": "muzyczka", "klubowa": "klubowa",
+    "klubowy": "klubowy", "klubowe": "klubowe", "piosenka": "piosenka", "piosenke": "piosenkę",
+    "piosenki": "piosenki", "piosenek": "piosenek", "utwor": "utwór", "utworze": "utworze",
+    "utwory": "utwory", "wykonawca": "wykonawca", "wykonawce": "wykonawcę", "wykonawcy": "wykonawcy",
+    "tytul": "tytuł", "tytulu": "tytułu", "tytuly": "tytuły", "sluchacz": "słuchacz",
+    "sluchacza": "słuchacza", "sluchacze": "słuchacze", "sluchaczy": "słuchaczy",
+    "sluchasz": "słuchasz", "sluchaj": "słuchaj", "sluchajcie": "słuchajcie",
+    "dziekuje": "dziękuję", "dziekujemy": "dziękujemy", "dzieki": "dzięki", "prosze": "proszę",
+    "urodziny": "urodziny", "urodzin": "urodzin", "imieniny": "imieniny", "imienin": "imienin",
+    "mozna": "można", "moze": "może", "moga": "mogą", "trzeba": "trzeba",
+    "zrobic": "zrobić", "zrobione": "zrobione", "zagrac": "zagrać", "zagramy": "zagramy",
+    "gramy": "gramy", "gralismy": "graliśmy", "gralamy": "grałyśmy", "puscic": "puścić",
+    "puscimy": "puścimy", "leci": "leci", "lecialo": "leciało", "leciala": "leciała",
+    "lecialy": "leciały", "bedzie": "będzie", "beda": "będą", "jestes": "jesteś",
+    "jestescie": "jesteście", "ktos": "ktoś", "cos": "coś", "nic": "nic",
+    "nigdzie": "nigdzie", "zawsze": "zawsze", "czasem": "czasem", "czesto": "często",
+    "bardzo": "bardzo", "duzo": "dużo", "malo": "mało", "troche": "trochę",
+    "fajnie": "fajnie", "swietnie": "świetnie", "wspanialego": "wspaniałego",
+    "wspanialy": "wspaniały", "wspaniala": "wspaniała", "najlepszego": "najlepszego",
+    "najlepsze": "najlepsze", "najlepszych": "najlepszych", "caluski": "całuski",
+    "pozdrowionka": "pozdrowionka", "impreza": "impreza", "imprezie": "imprezie",
+    "imprezowy": "imprezowy", "parkiet": "parkiet", "parkiecie": "parkiecie",
+    "parkiety": "parkiety", "bitwa": "bitwa", "bitwy": "bitwy", "gatunkow": "gatunków",
+    "kapsula": "kapsuła", "kapsule": "kapsułę", "czasu": "czasu", "kawaly": "kawały",
+    "kawalu": "kawału", "kawale": "kawale", "ciekawostki": "ciekawostki",
+    "ciekawostek": "ciekawostek", "nostalgia": "nostalgia", "nostalgii": "nostalgii",
+    "radiu": "radiu", "radia": "radia", "strefa": "strefa", "strefie": "strefie",
+    "zero": "zero", "zerze": "zerze", "sie": "się", "ze": "że",
+    "tez": "też", "wiecej": "więcej", "jesli": "jeśli", "jezeli": "jeżeli",
+    "wogole": "w ogóle", "narazie": "na razie", "poprostu": "po prostu",
+    "naprawde": "naprawdę", "napewno": "na pewno", "odrazu": "od razu",
+    "wsumie": "w sumie", "niewiem": "nie wiem", "nwm": "nie wiem",
+    "wszystko": "wszystko", "wszystkiego": "wszystkiego", "wszyscy": "wszyscy",
+    "wszystkich": "wszystkich", "ktory": "który", "ktora": "która",
+    "ktore": "które", "ktorych": "których", "ktorego": "którego",
+    "darmowy": "darmowy", "darmowym": "darmowym", "numer": "numer",
+    "numerem": "numerem", "wyslij": "wyślij", "wyslac": "wysłać",
+    "zamawiaj": "zamawiaj", "zamawiajcie": "zamawiajcie", "zamow": "zamów",
+    "zamowic": "zamówić", "zwyciezca": "zwycięzca", "zwyciezcy": "zwycięzcy",
+    "wygrywa": "wygrywa", "remis": "remis", "wspomnienia": "wspomnienia",
+    "sprawdzamy": "sprawdzamy", "sprawdz": "sprawdź", "energia": "energia",
+    "energii": "energii", "klimat": "klimat", "klimacie": "klimacie",
+    "przelot": "przelot", "zmiana": "zmiana", "zmiane": "zmianę",
 }
 
 ROZBIJANIE_SKLEJONYCH = {
@@ -609,16 +485,33 @@ def pobierz_oryginalny_tytul_z_sieci(wykonawca_lub_fraza: str, tytul: str = "") 
     return w_clean, t_clean
 
 
-def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str) -> bool:
-    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
+def _wybierz_voice_id_elevenlabs(glos: str = "", pitch: str = "+0Hz", rate: str = "+0%", gruby_glos: bool = False) -> str:
+    p_str = _format_pitch(pitch)
+    r_str = _format_rate(rate)
+    czy_niski = gruby_glos or p_str.startswith("-") or r_str.startswith("-") or ("bas" in (glos or "").lower()) or ("noc" in (glos or "").lower())
+    if czy_niski and ELEVENLABS_VOICE_ID_LOW:
+        return ELEVENLABS_VOICE_ID_LOW
+    return ELEVENLABS_VOICE_ID
+
+
+def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str, voice_id_override: str = "", gruby_glos: bool = False) -> bool:
+    voice_id = (voice_id_override or "").strip() or _wybierz_voice_id_elevenlabs(gruby_glos=gruby_glos)
+    if not ELEVENLABS_API_KEY or not voice_id:
         return False
     try:
+        stability = 0.55 if gruby_glos else 0.45
+        similarity = 0.85 if gruby_glos else 0.75
         resp = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
             json={
                 "text": tekst,
-                "model_id": "eleven_multilingual_v2",
-                "voice_settings": {"stability": 0.45, "similarity_boost": 0.75},
+                "model_id": ELEVENLABS_MODEL_ID,
+                "voice_settings": {
+                    "stability": stability,
+                    "similarity_boost": similarity,
+                    "style": 0.15 if gruby_glos else 0.0,
+                    "use_speaker_boost": True,
+                },
             },
             headers={
                 "xi-api-key": ELEVENLABS_API_KEY,
@@ -631,14 +524,74 @@ def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str) -> bool:
             with open(sciezka_mp3, "wb") as f:
                 f.write(resp.content)
             return True
+        logging.warning(f"ElevenLabs zwrócił status {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
-        logging.warning(f"Fallback ElevenLabs -> Edge-TTS: {e}")
+        logging.warning(f"Błąd ElevenLabs: {e}")
     return False
 
 
-async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeural", pitch="+0Hz", rate="+0%"):
-    if _elevenlabs_zapisz(tekst, sciezka_docelowa):
-        return
+def _obrob_glos_radiowy(sciezka_wejsciowa: str, gruby_glos: bool = False) -> str:
+    """Czyści dudnienie poniżej 80 Hz, lekko dociąża okolice 120 Hz i kompresuje głos."""
+    if not os.path.exists(sciezka_wejsciowa):
+        return sciezka_wejsciowa
+
+    podstawowe_podbicie = 3.5 if gruby_glos else 2.0
+    kompresja_ratio = "4" if gruby_glos else "3"
+    temp_out = f"{sciezka_wejsciowa}.proc.mp3"
+    af_filter = (
+        f"highpass=f=80,"
+        f"equalizer=f=120:width_type=h:width=80:g={podstawowe_podbicie},"
+        f"acompressor=threshold=-18dB:ratio={kompresja_ratio}:attack=12:release=140:makeup=2dB,"
+        f"loudnorm=I=-16:TP=-1.5:LRA=9"
+    )
+    try:
+        res = subprocess.run(
+            ["ffmpeg", "-y", "-i", sciezka_wejsciowa, "-af", af_filter, "-codec:a", "libmp3lame", "-q:a", "2", temp_out],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=25,
+        )
+        if res.returncode == 0 and os.path.exists(temp_out) and os.path.getsize(temp_out) > 512:
+            os.replace(temp_out, sciezka_wejsciowa)
+            return sciezka_wejsciowa
+    except Exception as e:
+        logging.debug(f"FFmpeg voice EQ pominięty: {e}")
+    finally:
+        if os.path.exists(temp_out):
+            try:
+                os.remove(temp_out)
+            except Exception:
+                pass
+
+    try:
+        seg = AudioSegment.from_file(sciezka_wejsciowa)
+        seg = seg.high_pass_filter(80)
+        if gruby_glos:
+            seg = seg.low_pass_filter(14500)
+        seg = effects.normalize(seg)
+        seg.export(sciezka_wejsciowa, format="mp3")
+    except Exception:
+        pass
+    return sciezka_wejsciowa
+
+
+async def async_generuj_edge_tts(
+    tekst,
+    sciezka_docelowa,
+    glos="pl-PL-MarekNeural",
+    pitch="+0Hz",
+    rate="+0%",
+    silnik="auto",
+    gruby_glos=False,
+):
+    uzyj_eleven = (silnik == "elevenlabs") or (silnik == "auto" and bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID))
+    if uzyj_eleven:
+        voice_id = _wybierz_voice_id_elevenlabs(glos=glos, pitch=pitch, rate=rate, gruby_glos=gruby_glos)
+        if _elevenlabs_zapisz(tekst, sciezka_docelowa, voice_id_override=voice_id, gruby_glos=gruby_glos):
+            _obrob_glos_radiowy(sciezka_docelowa, gruby_glos=gruby_glos)
+            return
+        if silnik == "elevenlabs":
+            raise RuntimeError("Nie udało się wygenerować głosu w ElevenLabs (sprawdź ELEVENLABS_API_KEY i ELEVENLABS_VOICE_ID).")
 
     pitch_str = _format_pitch(pitch)
     rate_str = _format_rate(rate)
@@ -654,6 +607,7 @@ async def async_generuj_edge_tts(tekst, sciezka_docelowa, glos="pl-PL-MarekNeura
             communicate = edge_tts.Communicate(tekst, v_name, pitch=p_s, rate=r_s)
             await communicate.save(sciezka_docelowa)
             if os.path.exists(sciezka_docelowa) and os.path.getsize(sciezka_docelowa) > 0:
+                _obrob_glos_radiowy(sciezka_docelowa, gruby_glos=gruby_glos)
                 return
         except Exception as e:
             ostatni_blad = e
@@ -683,6 +637,8 @@ def generuj_audio_mp3(
     rate="+0%",
     czy_sms=False,
     liczba_pikow_na_poczatku=0,
+    silnik="auto",
+    gruby_glos=False,
 ):
     sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku_koncowego)
     pliki_tymczasowe = []
@@ -692,7 +648,17 @@ def generuj_audio_mp3(
             if not oczyszczony:
                 continue
             temp_path = os.path.join(FOLDER_ROBOCZY, f"temp_{idx}_{nazwa_pliku_koncowego}")
-            uruchom_async(async_generuj_edge_tts(oczyszczony, temp_path, glos, pitch=pitch, rate=rate))
+            uruchom_async(
+                async_generuj_edge_tts(
+                    oczyszczony,
+                    temp_path,
+                    glos,
+                    pitch=pitch,
+                    rate=rate,
+                    silnik=silnik,
+                    gruby_glos=gruby_glos,
+                )
+            )
             if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
                 pliki_tymczasowe.append(temp_path)
 
@@ -1022,14 +988,22 @@ def _przygotuj_kapsule_czasu(rok: int, znacznik_data: str) -> bool:
             glos=PULA_BOTOW["marek_bas"]["voice"],
             pitch=PULA_BOTOW["marek_bas"]["pitch"],
             rate=PULA_BOTOW["marek_bas"]["rate"],
+            gruby_glos=True,
         )
         if lok_zap and os.path.exists(lok_zap):
             sftp.put(lok_zap, f"{DIR_KAPSULA_CZASU}/kapsula_01_zapowiedz_{znacznik_data}.mp3")
             os.remove(lok_zap)
-            sftp.put(
-                generuj_audio_mp3([("glos", tekst_zapowiedzi)], f"kapsula_spec_{znacznik_data}.mp3", glos=PULA_BOTOW["marek_bas"]["voice"], pitch=PULA_BOTOW["marek_bas"]["pitch"], rate=PULA_BOTOW["marek_bas"]["rate"]),
-                f"{DIR_AUDYCJE_SPECJALNE}/kapsula_{znacznik_data}.mp3",
+            lok_spec = generuj_audio_mp3(
+                [("glos", tekst_zapowiedzi)],
+                f"kapsula_spec_{znacznik_data}.mp3",
+                glos=PULA_BOTOW["marek_bas"]["voice"],
+                pitch=PULA_BOTOW["marek_bas"]["pitch"],
+                rate=PULA_BOTOW["marek_bas"]["rate"],
+                gruby_glos=True,
             )
+            if lok_spec and os.path.exists(lok_spec):
+                sftp.put(lok_spec, f"{DIR_AUDYCJE_SPECJALNE}/kapsula_{znacznik_data}.mp3")
+                os.remove(lok_spec)
 
         if wybrany_folder and wybrany_plik:
             lok_utwor = os.path.join(FOLDER_ROBOCZY, f"kapsula_src_{znacznik_data}.mp3")
@@ -1230,6 +1204,7 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             pitch=profil["pitch"],
             rate=profil["rate"],
             czy_sms=True,
+            gruby_glos=czy_noc,
         )
 
         if lokalny_glos and os.path.exists(lokalny_glos):
@@ -1389,7 +1364,7 @@ SZABLON_JINGLES = """
         .btn-preset { background: #2f3542; padding: 8px 12px; font-size: 13px; width: auto; margin-right: 6px; margin-bottom: 8px; }
         .btn-preset:hover { background: #57606f; }
         .btn-del { background: #e74c3c; padding: 5px 10px; font-size: 12px; width: auto; }
-        .checkbox-group { margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+        .checkbox-group { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
         audio { width: 100%; margin-top: 20px; }
         .hidden { display: none; }
         .back-link { display: inline-block; margin-bottom: 15px; color: #3498db; text-decoration: none; }
@@ -1408,7 +1383,7 @@ SZABLON_JINGLES = """
         <h2>🎛️ Radio Strefa Zero - Generator AI, Reklamy i Mixy</h2>
         
         <div class="info-box">
-            🎚️ Wybierz folder docelowy (w tym <b>blok reklamowy</b> z terminem ważności), bota/głos, ustaw Pitch i Rate i wyślij plik na SFTP. Bot automatycznie poskłada rozstrzelone litery, poprawi polskie słowa i wyczyści śmieci typu wbt3.pl / wbr3.pl.
+            🎚️ Wybierz silnik (<b>ElevenLabs</b> dla grubszego, czystego głosu ze stałym <code>voice_id</code> lub <b>Edge-TTS</b>), folder docelowy i podkład. Bot automatycznie oczyści głos i wyśle plik na SFTP.
         </div>
 
         <div style="margin-bottom: 14px;">
@@ -1434,6 +1409,13 @@ SZABLON_JINGLES = """
                 <input type="datetime-local" name="expires_at" id="expires_at">
             </div>
 
+            <label>Silnik głosu:</label>
+            <select name="engine" id="engine">
+                <option value="auto" {% if elevenlabs_configured %}selected{% endif %}>Automatyczny (ElevenLabs jeśli skonfigurowany, inaczej Edge-TTS)</option>
+                <option value="elevenlabs">ElevenLabs (Stały głos z ELEVENLABS_VOICE_ID)</option>
+                <option value="edge" {% if not elevenlabs_configured %}selected{% endif %}>Edge-TTS (Darmowe głosy polskie)</option>
+            </select>
+
             <label>Wybierz profil bota z puli:</label>
             <select id="bot_preset" onchange="zastosujProfilBota()">
                 {% for k, cfg in bot_pool.items() %}
@@ -1441,7 +1423,7 @@ SZABLON_JINGLES = """
                 {% endfor %}
             </select>
 
-            <label>Wybierz głos lektora:</label>
+            <label>Wybierz głos lektora (dla Edge-TTS):</label>
             <select name="voice" id="voice_select">
                 <optgroup label="Głosy Męskie">
                     <option value="pl-PL-MarekNeural">Marek (Klasyczny)</option>
@@ -1457,21 +1439,26 @@ SZABLON_JINGLES = """
                 </optgroup>
             </select>
 
+            <div class="checkbox-group">
+                <input type="checkbox" id="heavy_voice" name="heavy_voice" {% if elevenlabs_configured %}checked{% endif %}>
+                <label for="heavy_voice">Gruby / dociążony głos radiowy (filtr 80 Hz + podbicie 120 Hz + kompresja)</label>
+            </div>
+
             <div class="slider-label">
-                <span>Wysokość tonu głosu (Pitch):</span>
+                <span>Wysokość tonu głosu (Pitch — Edge-TTS):</span>
                 <span id="pitchVal">0Hz (Naturalny)</span>
             </div>
             <input type="range" name="pitch" id="pitch" min="-15" max="15" value="0" step="1" oninput="updatePitch(this.value)">
 
             <div class="slider-label">
-                <span>Prędkość mowy (Rate):</span>
+                <span>Prędkość mowy (Rate — Edge-TTS):</span>
                 <span id="rateVal">0% (Normalna)</span>
             </div>
             <input type="range" name="rate" id="rate" min="-25" max="25" value="0" step="5" oninput="updateRate(this.value)">
 
             <div class="checkbox-group">
                 <input type="checkbox" id="add_music" name="add_music" onchange="toggleMusicSelect()">
-                <label for="add_music">Dodaj podkład muzyczny w tle</label>
+                <label for="add_music">Dodaj podkład muzyczny w tle (z automatycznym ściszeniem)</label>
             </div>
             
             <div id="musicSelectContainer" class="hidden">
@@ -1712,6 +1699,7 @@ def panel_jingles():
         bot_pool=PULA_BOTOW,
         active_ads=sformatowane_reklamy,
         recent_logs=pobierz_ostatnie_logi(25),
+        elevenlabs_configured=bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID),
     )
 
 
@@ -1720,6 +1708,11 @@ def endpoint_generuj_jingle_ai():
     text = request.form.get("text", "").strip()
     selected_music = request.form.get("music")
     add_music = request.form.get("add_music") == "on"
+    heavy_voice = request.form.get("heavy_voice") == "on"
+    engine = request.form.get("engine", "auto").strip()
+    if engine not in ("auto", "elevenlabs", "edge"):
+        engine = "auto"
+
     selected_voice = request.form.get("voice", "pl-PL-MarekNeural")
     target_folder = request.form.get("target_folder", "jingles")
     expires_at_raw = request.form.get("expires_at", "").strip()
@@ -1750,28 +1743,36 @@ def endpoint_generuj_jingle_ai():
     final_output = os.path.join(DIR_STATIC_OUTPUT, nazwa_pliku)
 
     try:
-        uruchom_async(async_generuj_edge_tts(oczyszczony_tekst, speech_file, selected_voice, pitch=pitch_str, rate=rate_str))
+        uruchom_async(
+            async_generuj_edge_tts(
+                oczyszczony_tekst,
+                speech_file,
+                selected_voice,
+                pitch=pitch_str,
+                rate=rate_str,
+                silnik=engine,
+                gruby_glos=heavy_voice,
+            )
+        )
 
         if not os.path.exists(speech_file):
             return jsonify({"status": "error", "message": "Nie udało się wygenerować mowy."}), 500
 
+        speech = effects.normalize(AudioSegment.from_file(speech_file))
         if add_music and selected_music:
             music_path = os.path.join(DIR_STATIC_MUSIC, selected_music)
             if os.path.exists(music_path):
-                speech = effects.normalize(AudioSegment.from_file(speech_file))
                 music = AudioSegment.from_file(music_path)
-
                 target_duration = len(speech) + 2000
-                if len(music) > target_duration:
-                    music = music[:target_duration]
-
-                music = music - 18
+                while len(music) < target_duration:
+                    music += music
+                music = music[:target_duration] - 18
                 combined = music.overlay(speech, position=500)
                 combined.export(final_output, format="mp3")
             else:
-                effects.normalize(AudioSegment.from_file(speech_file)).export(final_output, format="mp3")
+                speech.export(final_output, format="mp3")
         else:
-            effects.normalize(AudioSegment.from_file(speech_file)).export(final_output, format="mp3")
+            speech.export(final_output, format="mp3")
 
         if os.path.exists(speech_file):
             try:
@@ -1828,7 +1829,15 @@ def index_glowna():
 
 def _wykonaj_wstawke_i_wyslij(kwestie, folder_sftp, nazwa_pliku, bot_key="marek_standard"):
     profil = PULA_BOTOW.get(bot_key, PULA_BOTOW["marek_standard"])
-    lokalny = generuj_audio_mp3(kwestie, nazwa_pliku, glos=profil["voice"], pitch=profil["pitch"], rate=profil["rate"])
+    gruby = bot_key in ("marek_bas", "marek_noc")
+    lokalny = generuj_audio_mp3(
+        kwestie,
+        nazwa_pliku,
+        glos=profil["voice"],
+        pitch=profil["pitch"],
+        rate=profil["rate"],
+        gruby_glos=gruby,
+    )
     if not lokalny or not os.path.exists(lokalny):
         return False
     transport = None
