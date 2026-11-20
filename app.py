@@ -1729,9 +1729,9 @@ def petla_harmonogramu_w_tle():
                 if docelowa_godzina != ostatnia_zapowiedziana_godzina:
                     transport = None
                     sftp = None
+                    wyslano_cokolwiek = False
                     try:
                         transport, sftp = polacz_sftp()
-                        wyslano_cokolwiek = False
 
                         nazwa_pliku_godzina = f"godzina_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
                         sciezka_g = generuj_audio_mp3(
@@ -1781,6 +1781,7 @@ def petla_harmonogramu_w_tle():
 
                         if wyslano_cokolwiek:
                             zsynchronizuj_azuracast()
+                            ostatnia_zapowiedziana_godzina = docelowa_godzina
                     finally:
                         if sftp:
                             try:
@@ -1792,8 +1793,6 @@ def petla_harmonogramu_w_tle():
                                 transport.close()
                             except Exception:
                                 pass
-
-                    ostatnia_zapowiedziana_godzina = docelowa_godzina
 
             if czy_noc and teraz.minute == 1 and _raz_na_minute(f"noc_{klucz_min}"):
                 tekst_noc = _wybierz_bez_powtorek("nocne_radio", NOCNE_WEJSCIA_KLUBOWE)
