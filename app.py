@@ -33,7 +33,6 @@ FOLDER_ROBOCZY = "roboczy_radio"
 DIR_STATIC_MUSIC = "static/music"
 DIR_STATIC_OUTPUT = "static/output"
 PLIK_TERMINY_REKLAM = os.path.join(FOLDER_ROBOCZY, "reklamy_terminy.json")
-PLIK_GLOSOW_BITWY = os.path.join(FOLDER_ROBOCZY, "bitwa_glosy.json")
 PLIK_HISTORIA_TEKSTOW = os.path.join(FOLDER_ROBOCZY, "historia_teksty.json")
 
 os.makedirs(FOLDER_ROBOCZY, exist_ok=True)
@@ -67,9 +66,6 @@ DIR_BLOK_REKLAMOWY = "blok reklamowy"
 DIR_MIXY = "mixy"
 DIR_WSTAWKI_AI = "wstawki_ai"
 DIR_AUDYCJE_SPECJALNE = "audycje_specjalne"
-DIR_KAPSULA_CZASU = "kapsuła czasu"
-DIR_KAWALY = "kawały"
-DIR_BITWA_NA_PIOSENKI = "Bitwa na piosenki"
 DIR_CIEKAWOSTKI = "ciekawostki"
 DIR_NOCNE_RADIO = "nocne_radio"
 
@@ -94,9 +90,6 @@ WSZYSTKIE_FOLDERY_SFTP = (
     DIR_MIXY,
     DIR_WSTAWKI_AI,
     DIR_AUDYCJE_SPECJALNE,
-    DIR_KAPSULA_CZASU,
-    DIR_KAWALY,
-    DIR_BITWA_NA_PIOSENKI,
     DIR_CIEKAWOSTKI,
     DIR_NOCNE_RADIO,
 ) + tuple(FOLDERY_GATUNKOWE)
@@ -117,23 +110,10 @@ PULA_BOTOW = {
     "zofia_news": {"name": "Zofia (Newsy)", "voice": "pl-PL-ZofiaNeural", "pitch": 0, "rate": 4},
 }
 
-KACIK_NOSTALGII = [
-    "Kącik nostalgii w Radiu Strefa Zero: wracamy do wielkich hitów z lat osiemdziesiątych i dziewięćdziesiątych, które do dziś mają w sobie świetną energię.",
-    "Klasyka parkietu w Radiu Strefa Zero: italo disco i taneczne numery sprzed lat, które zawsze dobrze brzmią na głośnikach.",
-    "W latach osiemdziesiątych europejskie italo disco budowało własne brzmienie na syntezatorach i automatach perkusyjnych — ten klimat nigdy się nie starzeje.",
-    "Złote lata dyskotek to nie tylko wielkie refreny, ale też numery, które potrafiły rozkręcić każdy parkiet w kilka sekund.",
-    "Lata dziewięćdziesiąte przyniosły potężne uderzenie eurodance i klubowej energii, do którego w Radiu Strefa Zero wracamy bez wahania.",
-    "Niektóre utwory po trzydziestu latach nadal brzmią świeżo i zadziornie — w Radiu Strefa Zero klasyka ma swoje stałe miejsce.",
-    "Stare kasety, pierwsze kompakty i nocne imprezy przy głośnikach — wracamy do kawałków, które pamięta każdy fan dobrej muzyki.",
-]
-
-KAWALY_TEKSTY = [
-    "Przychodzi facet do lekarza i mówi: Panie doktorze, nikt mnie nie zauważa. Lekarz podnosi wzrok i mówi: Następny proszę!",
-    "Dlaczego informatyk nie lubi chodzić na grzyby? Bo ma za dużo robaków i zero wsparcia technicznego.",
-    "Rozmawiają dwa zegary na ścianie. Jeden mówi: Stary, strasznie szybko ten czas leci. Drugi odpowiada: Nie narzekaj, przynajmniej mamy wskazówki.",
-    "Mąż mówi do żony: Kochanie, wyglądasz dzisiaj kwitnąco. Żona na to: Przestań słodzić, czego chcesz? Mąż: Chciałem tylko zapytać, czy mamy coś do jedzenia.",
-    "Wchodzi facet do sklepu muzycznego i mówi: Poproszę płytę, która rozkręci każdą imprezę. Sprzedawca uśmiecha się i mówi: To włącz Radio Strefa Zero!",
-    "Spotykają się dwaj koledzy: Słuchasz jeszcze tego starego radia? Nie, teraz tylko Radio Strefa Zero, bo gra konkretnie i bez nudy.",
+PORANNE_WSTAWKI = [
+    "Dobrego poranka w Radiu Strefa Zero! Startujemy z muzyką, która budzi lepiej niż poranna kawa.",
+    "Nowy dzień w Radiu Strefa Zero! Podkręcamy brzmienie i lecimy dalej z dobrą energią.",
+    "Poranna zmiana w Radiu Strefa Zero! Włączamy dobry nastrój od samego rana.",
 ]
 
 KACIK_WEEKENDOWY = [
@@ -181,12 +161,8 @@ SLOWNIK_POLSKICH_SLOW = {
     "najlepsze": "najlepsze", "najlepszych": "najlepszych", "caluski": "całuski",
     "pozdrowionka": "pozdrowionka", "impreza": "impreza", "imprezie": "imprezie",
     "imprezowy": "imprezowy", "parkiet": "parkiet", "parkiecie": "parkiecie",
-    "parkiety": "parkiety", "bitwa": "bitwa", "bitwy": "bitwy", "gatunkow": "gatunków",
-    "kapsula": "kapsuła", "kapsule": "kapsułę", "czasu": "czasu", "kawaly": "kawały",
-    "kawalu": "kawału", "kawale": "kawale", "ciekawostki": "ciekawostki",
-    "ciekawostek": "ciekawostek", "nostalgia": "nostalgia", "nostalgii": "nostalgii",
-    "radiu": "radiu", "radia": "radia", "strefa": "strefa", "strefie": "strefie",
-    "zero": "zero", "zerze": "zerze", "sie": "się", "ze": "że",
+    "parkiety": "parkiety", "radiu": "radiu", "radia": "radia", "strefa": "strefa",
+    "strefie": "strefie", "zero": "zero", "zerze": "zerze", "sie": "się", "ze": "że",
     "tez": "też", "wiecej": "więcej", "jesli": "jeśli", "jezeli": "jeżeli",
     "wogole": "w ogóle", "narazie": "na razie", "poprostu": "po prostu",
     "naprawde": "naprawdę", "napewno": "na pewno", "odrazu": "od razu",
@@ -197,11 +173,9 @@ SLOWNIK_POLSKICH_SLOW = {
     "darmowy": "darmowy", "darmowym": "darmowym", "numer": "numer",
     "numerem": "numerem", "wyslij": "wyślij", "wyslac": "wysłać",
     "zamawiaj": "zamawiaj", "zamawiajcie": "zamawiajcie", "zamow": "zamów",
-    "zamowic": "zamówić", "zwyciezca": "zwycięzca", "zwyciezcy": "zwycięzcy",
-    "wygrywa": "wygrywa", "remis": "remis", "wspomnienia": "wspomnienia",
-    "sprawdzamy": "sprawdzamy", "sprawdz": "sprawdź", "energia": "energia",
-    "energii": "energii", "klimat": "klimat", "klimacie": "klimacie",
-    "przelot": "przelot", "zmiana": "zmiana", "zmiane": "zmianę",
+    "zamowic": "zamówić", "energia": "energia", "energii": "energii",
+    "klimat": "klimat", "klimacie": "klimacie", "przelot": "przelot",
+    "zmiana": "zmiana", "zmiane": "zmianę",
 }
 
 ROZBIJANIE_SKLEJONYCH = {
@@ -219,7 +193,6 @@ ROZBIJANIE_SKLEJONYCH = {
 }
 
 terminy_lock = threading.Lock()
-glosy_lock = threading.Lock()
 historia_lock = threading.Lock()
 
 
@@ -311,27 +284,6 @@ def zapisz_terminy_reklam(dane):
                 json.dump(dane, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logging.error(f"Błąd zapisu terminów reklam: {e}")
-
-
-def _wczytaj_glosy():
-    with glosy_lock:
-        if not os.path.exists(PLIK_GLOSOW_BITWY):
-            return {"DYSKOTEKA": 0, "ITALO": 0}
-        try:
-            with open(PLIK_GLOSOW_BITWY, "r", encoding="utf-8") as f:
-                d = json.load(f)
-                return {"DYSKOTEKA": int(d.get("DYSKOTEKA", 0)), "ITALO": int(d.get("ITALO", 0))}
-        except Exception:
-            return {"DYSKOTEKA": 0, "ITALO": 0}
-
-
-def _zapisz_glosy(dane):
-    with glosy_lock:
-        try:
-            with open(PLIK_GLOSOW_BITWY, "w", encoding="utf-8") as f:
-                json.dump(dane, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logging.error(f"Błąd zapisu głosów bitwy: {e}")
 
 
 def polacz_sftp():
@@ -708,37 +660,6 @@ def pobierz_aktualne_newsy_rmf():
     return ""
 
 
-def pobierz_nowplaying_dj():
-    if not AZURACAST_URL:
-        return ""
-    try:
-        resp = requests.get(f"{AZURACAST_URL}/api/nowplaying/{AZURACAST_STATION_ID}", timeout=10)
-        if resp.status_code != 200:
-            return ""
-        song = (resp.json().get("now_playing") or {}).get("song") or {}
-        raw_tytul = (song.get("title") or "").strip()
-        raw_wykonawca = (song.get("artist") or "").strip()
-        wykonawca, tytul = pobierz_oryginalny_tytul_z_sieci(raw_wykonawca, raw_tytul)
-
-        if wykonawca and tytul:
-            warianty = [
-                f"Właśnie wybrzmiał u nas kawałek: {wykonawca} — {tytul}. Jedziemy dalej w Radiu Strefa Zero!",
-                f"Na antenie Radia Strefa Zero przed momentem graliśmy {wykonawca} i utwór {tytul}. Zostawiamy dobry klimat!",
-                f"Słyszeliście właśnie {wykonawca} — {tytul}. W Radiu Strefa Zero nie zwalniamy tempa!",
-                f"Za nami {wykonawca} w numerze {tytul}. Trzymajcie głośność w Radiu Strefa Zero!",
-            ]
-            return _wybierz_bez_powtorek("dj_backannounce", warianty)
-        if tytul:
-            warianty = [
-                f"Przed chwilą w Radiu Strefa Zero poleciał numer {tytul}. Lecimy z kolejnym kawałkiem!",
-                f"Właśnie wybrzmiał utwór {tytul}. Zostajemy w dobrym brzmieniu w Radiu Strefa Zero!",
-            ]
-            return _wybierz_bez_powtorek("dj_backannounce_tytul", warianty)
-    except Exception as e:
-        logging.warning(f"Błąd nowplaying DJ: {e}")
-    return ""
-
-
 def okresl_folder_gatunkowy(zapytanie):
     t = zapytanie.lower()
     if any(k in t for k in ("club", "klub", "house", "techno", "edm")):
@@ -837,10 +758,10 @@ def zbuduj_informacje_rmf():
 
 
 def zbuduj_poranny_serwis():
-    ciekawostka = _wybierz_bez_powtorek("poranek_ciekawostki", KACIK_NOSTALGII)
+    wstawka_poranna = _wybierz_bez_powtorek("poranek_wstawki", PORANNE_WSTAWKI)
     return [
         ("glos", "Witamy w porannym bloku Radia Strefa Zero! Życzymy Wam wspaniałego, pełnego energii dnia."),
-        ("glos", ciekawostka),
+        ("glos", wstawka_poranna),
         ("glos", f"Zostajcie z nami. Zamawiajcie piosenki darmowym SMS-em na numer: {NUMER_TEL_TEKST}."),
     ]
 
@@ -952,137 +873,6 @@ def wygeneruj_mix_z_folderu(
                 pass
 
 
-def _przygotuj_kapsule_czasu(rok: int, znacznik_data: str) -> bool:
-    transport = None
-    sftp = None
-    lok_utwor = None
-    try:
-        transport, sftp = polacz_sftp()
-        zrodla = ["italo disco", "muzyka mix", "disco polo dance", "disco polo"]
-        wybrany_plik = None
-        wybrany_folder = None
-        for fld in zrodla:
-            try:
-                pliki = [
-                    f for f in sftp.listdir(fld)
-                    if f.lower().endswith(".mp3") and not f.startswith("mix_") and not f.startswith("kapsula_")
-                ]
-                if pliki:
-                    wybrany_folder = fld
-                    wybrany_plik = random.choice(pliki)
-                    break
-            except Exception:
-                continue
-
-        czysta_nazwa = oczysc_wykonawce_i_tytul(wybrany_plik or "")
-        w_api, t_api = pobierz_oryginalny_tytul_z_sieci(czysta_nazwa)
-        etykieta_utworu = f"{w_api} — {t_api}" if (w_api and t_api) else (czysta_nazwa or "klasyczny numer z archiwum")
-
-        tekst_zapowiedzi = (
-            f"Kapsuła Czasu w Radiu Strefa Zero! Cofamy się do roku {rok}, "
-            f"żeby przypomnieć sobie kawałek: {etykieta_utworu}."
-        )
-        lok_zap = generuj_audio_mp3(
-            [("glos", tekst_zapowiedzi)],
-            f"kapsula_01_zapowiedz_{znacznik_data}.mp3",
-            glos=PULA_BOTOW["marek_bas"]["voice"],
-            pitch=PULA_BOTOW["marek_bas"]["pitch"],
-            rate=PULA_BOTOW["marek_bas"]["rate"],
-            gruby_glos=True,
-        )
-        if lok_zap and os.path.exists(lok_zap):
-            sftp.put(lok_zap, f"{DIR_KAPSULA_CZASU}/kapsula_01_zapowiedz_{znacznik_data}.mp3")
-            os.remove(lok_zap)
-            lok_spec = generuj_audio_mp3(
-                [("glos", tekst_zapowiedzi)],
-                f"kapsula_spec_{znacznik_data}.mp3",
-                glos=PULA_BOTOW["marek_bas"]["voice"],
-                pitch=PULA_BOTOW["marek_bas"]["pitch"],
-                rate=PULA_BOTOW["marek_bas"]["rate"],
-                gruby_glos=True,
-            )
-            if lok_spec and os.path.exists(lok_spec):
-                sftp.put(lok_spec, f"{DIR_AUDYCJE_SPECJALNE}/kapsula_{znacznik_data}.mp3")
-                os.remove(lok_spec)
-
-        if wybrany_folder and wybrany_plik:
-            lok_utwor = os.path.join(FOLDER_ROBOCZY, f"kapsula_src_{znacznik_data}.mp3")
-            sftp.get(f"{wybrany_folder}/{wybrany_plik}", lok_utwor)
-            if os.path.exists(lok_utwor) and os.path.getsize(lok_utwor) > 1024:
-                sftp.put(lok_utwor, f"{DIR_KAPSULA_CZASU}/kapsula_02_utwor_{znacznik_data}.mp3")
-
-        zsynchronizuj_azuracast()
-        return True
-    except Exception as e:
-        logging.error(f"Błąd przygotowania Kapsuły Czasu: {e}")
-        return False
-    finally:
-        if lok_utwor and os.path.exists(lok_utwor):
-            try:
-                os.remove(lok_utwor)
-            except Exception:
-                pass
-        if sftp:
-            try:
-                sftp.close()
-            except Exception:
-                pass
-        if transport:
-            try:
-                transport.close()
-            except Exception:
-                pass
-
-
-def _przygotuj_bitwe_zwyciezce(zwyciezca_label: str, folder_zrodlowy: str, znacznik_data: str) -> bool:
-    transport = None
-    sftp = None
-    pobrane = []
-    try:
-        transport, sftp = polacz_sftp()
-        try:
-            pliki = [
-                f for f in sftp.listdir(folder_zrodlowy)
-                if f.lower().endswith(".mp3") and not f.startswith("mix_")
-            ]
-        except Exception:
-            pliki = []
-
-        wybrane = random.sample(pliki, min(4, len(pliki))) if pliki else []
-        for idx, fn in enumerate(wybrane, start=1):
-            lok_p = os.path.join(FOLDER_ROBOCZY, f"bitwa_src_{idx}_{znacznik_data}.mp3")
-            sftp.get(f"{folder_zrodlowy}/{fn}", lok_p)
-            if os.path.exists(lok_p) and os.path.getsize(lok_p) > 1024:
-                pobrane.append((idx, lok_p))
-
-        for idx, lok_p in pobrane:
-            sftp.put(lok_p, f"{DIR_BITWA_NA_PIOSENKI}/bitwa_{idx:02d}_{znacznik_data}.mp3")
-
-        zsynchronizuj_azuracast()
-        logging.info(f"Wysłano {len(pobrane)} utworów zwycięzcy ({zwyciezca_label}) do '{DIR_BITWA_NA_PIOSENKI}'.")
-        return True
-    except Exception as e:
-        logging.error(f"Błąd wysyłania zwycięzców bitwy do '{DIR_BITWA_NA_PIOSENKI}': {e}")
-        return False
-    finally:
-        for _, p in pobrane:
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
-        if sftp:
-            try:
-                sftp.close()
-            except Exception:
-                pass
-        if transport:
-            try:
-                transport.close()
-            except Exception:
-                pass
-
-
 def wyczysc_wygasle_reklamy(sftp):
     terminy = wczytaj_terminy_reklam()
     if not terminy:
@@ -1123,13 +913,6 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
         profil = PULA_BOTOW["marek_noc"] if czy_noc else PULA_BOTOW["marek_standard"]
 
         t_low = tresc_sms.lower()
-        glosy = _wczytaj_glosy()
-        if "dyskoteka" in t_low:
-            glosy["DYSKOTEKA"] += 1
-            _zapisz_glosy(glosy)
-        elif "italo" in t_low:
-            glosy["ITALO"] += 1
-            _zapisz_glosy(glosy)
 
         if "koncert" in t_low:
             typ_audycji = "koncert"
@@ -1298,7 +1081,7 @@ def endpoint_generuj_mix():
     )
 
     zdalna = wygeneruj_mix_z_folderu(
-        folder_gatunkowy=folder_gatunek,
+        folder_gatunkowy=folder_gatunkowy,
         liczba_utworow=liczba,
         crossfade_ms=crossfade_ms,
         folder_docelowy=folder_docelowy,
@@ -1389,7 +1172,6 @@ SZABLON_JINGLES = """
         <div style="margin-bottom: 14px;">
             <span style="font-size: 13px; color: #aaa; display: block; margin-bottom: 6px;">Szybkie szablony zapowiedzi:</span>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Wracamy do złotych hitów z lat osiemdziesiątych i dziewięćdziesiątych. Sprawdź, co z tamtych lat gra teraz w Radiu Strefa Zero!')">🕰️ Klasyki 80/90</button>
-            <button type="button" class="btn-preset" onclick="wstawSzablon('Starcie gatunków w Radiu Strefa Zero! Co wolisz na kolejnym bloku – energetyczne disco polo czy klasyczne italo disco?')">⚔️ Bitwa Gatunków</button>
             <button type="button" class="btn-preset" onclick="wstawSzablon('Nocne pasmo w Radiu Strefa Zero. Głęboki bit, zero pośpiechu i muzyka, która trzyma na nogach do rana.')">🌙 Nocny Klimat</button>
         </div>
         
@@ -1907,9 +1689,6 @@ def petla_harmonogramu_w_tle():
                         DIR_GODZINA,
                         DIR_NEWS,
                         DIR_WSTAWKI_AI,
-                        DIR_KAPSULA_CZASU,
-                        DIR_KAWALY,
-                        DIR_BITWA_NA_PIOSENKI,
                         DIR_CIEKAWOSTKI,
                         DIR_NOCNE_RADIO,
                     )
@@ -2023,74 +1802,9 @@ def petla_harmonogramu_w_tle():
                     _wykonaj_wstawke_i_wyslij([("glos", tekst_noc)], DIR_WSTAWKI_AI, nazwa_noc, bot_key="marek_noc")
                     zsynchronizuj_azuracast()
 
-            if hhmm == "12:15" and _raz_na_minute(f"kapsula_{klucz_min}"):
-                lata = [1984, 1986, 1988, 1990, 1993, 1996, 1999]
-                rok = lata[teraz.day % len(lata)]
-                if _przygotuj_kapsule_czasu(rok, teraz.strftime("%Y%m%d")):
-                    logging.info(f"Przygotowano Kapsułę Czasu ({rok}) dla folderu '{DIR_KAPSULA_CZASU}'.")
-
-            if teraz.weekday() == 4 and hhmm == "15:30" and _raz_na_minute(f"bitwa_start_{klucz_min}"):
-                if _wykonaj_wstawke_i_wyslij(
-                    [("glos", "Bitwa Gatunków w Radiu Strefa Zero! DYSKOTEKA kontra ITALO DISCO — wyślij SMS DYSKOTEKA albo ITALO!")],
-                    DIR_WSTAWKI_AI,
-                    f"bitwa_start_{teraz.strftime('%Y%m%d')}.mp3",
-                    bot_key="marek_standard",
-                ):
-                    zsynchronizuj_azuracast()
-
-            if teraz.weekday() == 4 and hhmm == "16:30" and _raz_na_minute(f"bitwa_wynik_{klucz_min}"):
-                glosy = _wczytaj_glosy()
-                if glosy["ITALO"] > glosy["DYSKOTEKA"]:
-                    zwyciezca = "Italo Disco"
-                    folder_zw = "italo disco"
-                elif glosy["DYSKOTEKA"] > glosy["ITALO"]:
-                    zwyciezca = "Disco Polo"
-                    folder_zw = "disco polo"
-                else:
-                    zwyciezca = "remis — gramy mix"
-                    folder_zw = "muzyka mix"
-
-                tekst_w = (
-                    f"Wynik Bitwy Gatunków w Radiu Strefa Zero: DYSKOTEKA {glosy['DYSKOTEKA']}, "
-                    f"ITALO {glosy['ITALO']}. Wygrywa: {zwyciezca}!"
-                )
-                _zapisz_glosy({"DYSKOTEKA": 0, "ITALO": 0})
-                if _wykonaj_wstawke_i_wyslij(
-                    [("glos", tekst_w)],
-                    DIR_AUDYCJE_SPECJALNE,
-                    f"bitwa_wynik_{teraz.strftime('%Y%m%d')}.mp3",
-                    bot_key="zofia_standard",
-                ):
-                    _przygotuj_bitwe_zwyciezce(zwyciezca, folder_zw, teraz.strftime("%Y%m%d"))
-                    zsynchronizuj_azuracast()
-
-            if hhmm in ("10:30", "14:30", "19:30") and _raz_na_minute(f"nostalgia_{klucz_min}"):
-                tekst_nost = _wybierz_bez_powtorek("ciekawostki", KACIK_NOSTALGII)
-                nazwa_nost = f"nostalgia_{teraz.strftime('%Y%m%d_%H%M')}.mp3"
-                if _wykonaj_wstawke_i_wyslij([("glos", tekst_nost)], DIR_CIEKAWOSTKI, nazwa_nost, bot_key="zofia_standard"):
-                    _wykonaj_wstawke_i_wyslij([("glos", tekst_nost)], DIR_WSTAWKI_AI, nazwa_nost, bot_key="zofia_standard")
-                    zsynchronizuj_azuracast()
-
-            if hhmm in ("13:20", "17:40", "21:10") and _raz_na_minute(f"kawal_{klucz_min}"):
-                tekst_kaw = _wybierz_bez_powtorek("kawaly", KAWALY_TEKSTY)
-                nazwa_kaw = f"kawal_{teraz.strftime('%Y%m%d_%H%M')}.mp3"
-                if _wykonaj_wstawke_i_wyslij([("glos", tekst_kaw)], DIR_KAWALY, nazwa_kaw, bot_key="marek_standard"):
-                    _wykonaj_wstawke_i_wyslij([("glos", tekst_kaw)], DIR_WSTAWKI_AI, nazwa_kaw, bot_key="marek_standard")
-                    zsynchronizuj_azuracast()
-
             if czy_weekend and hhmm in ("18:10", "20:10") and _raz_na_minute(f"weekend_{klucz_min}"):
                 tekst_wk = _wybierz_bez_powtorek("weekend", KACIK_WEEKENDOWY)
                 if _wykonaj_wstawke_i_wyslij([("glos", tekst_wk)], DIR_WSTAWKI_AI, f"weekend_{teraz.strftime('%Y%m%d_%H%M')}.mp3", bot_key="marek_bas"):
-                    zsynchronizuj_azuracast()
-
-            if teraz.minute in (5, 35) and _raz_na_minute(f"dj_{klucz_min}"):
-                kom_dj = pobierz_nowplaying_dj()
-                if kom_dj and _wykonaj_wstawke_i_wyslij(
-                    [("glos", kom_dj)],
-                    DIR_WSTAWKI_AI,
-                    f"dj_{teraz.strftime('%Y%m%d_%H%M')}.mp3",
-                    bot_key="marek_noc" if czy_noc else "marek_standard",
-                ):
                     zsynchronizuj_azuracast()
 
             if teraz.minute == 0 and teraz.hour % 4 == 0 and teraz.hour != ostatni_mix_godzina:
