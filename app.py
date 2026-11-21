@@ -111,6 +111,12 @@ INFO_RMF_KONIEC = 23
 
 NUMER_TEL_TEKST = "plus jeden, 812, 412, 29, siedemdziesiąt pięć"
 
+WAZNE_SLOWA_NEWS = (
+    "policj", "sejm", "rząd", "premier", "prezydent", "minister", "sąd", "prokuratur",
+    "wojsko", "bezpieczeństw", "granic", "ceny", "podroża", "gospodark", "kopalni",
+    "wypadek", "pożar", "alarm", "pogod", "świat", "ukrain", "rosj", "usa", "trump",
+)
+
 PULA_BOTOW = {
     "marek_standard": {"name": "Marek (Klasyczny)", "voice": "pl-PL-MarekNeural", "pitch": 0, "rate": 0},
     "marek_bas": {"name": "Marek (Spokojny / Niski)", "voice": "pl-PL-MarekNeural", "pitch": -3, "rate": -5},
@@ -833,40 +839,90 @@ def generuj_audio_mp3(
                     pass
 
 
-def pobierz_swieze_naglowki_rmf(limit: int = 12) -> list[str]:
+def _wybierz_najwazniejsze_naglowki(kandydaci: list[str], limit: int = 5) -> list[str]:
+    oczyszczone: list[str] = []
+    widziane: set[str] = set()
+
+    for raw in kandydaci:
+        tytul = oczysc_wykonawce_i_tytul(raw or "")
+        if not tytul or len(tytul) < 18:
+            continue
+        klucz = re.sub(r"\W+", "", tytul.lower())
+        if not klucz or klucz in widziane:
+            continue
+        widziane.add(klucz)
+        oczyszczone.append(tytul)
+
+    punktowane: list[tuple[int, int, str]] = []
+    for idx, tytul in enumerate(oczyszczone):
+        low = tytul.lower()
+        punkty = max(0, 20 - idx)
+        if any(w in low for w in WAZNE_SLOWA_NEWS):
+            punkty += 15
+        if "?" in tytul:
+            punkty -= 4
+        punktowane.append((punkty, idx, tytul))
+
+    punktowane.sort(key=lambda item: (-item[0], item[1]))
+    wybrane = [t for _, _, t in punktowane[:limit]]
+    kolejnosc = {t: i for i, t in enumerate(oczyszczone)}
+    wybrane.sort(key=lambda t: kolejnosc.get(t, 999))
+    return wybrane
+
+
+def pobierz_swieze_naglowki_rmf(limit: int = 5) -> list[str]:
     teraz = datetime.now(STREFA_EUROPA)
     if teraz.weekday() not in INFO_RMF_DNI or not (INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC):
         return []
-    try:
-        cache_buster = int(time.time())
-        url_rss = f"https://www.rmf24.pl/fakty/rss?v={cache_buster}"
-        feed = feedparser.parse(url_rss, agent="Mozilla/5.0 RadioStrefaZeroBot/1.0")
-        naglowki = []
-        seen = set()
-        if getattr(feed, "entries", None):
-            for entry in feed.entries:
-                tytul = oczysc_wykonawce_i_tytul((entry.get("title") or "").strip())
-                opis = oczysc_wykonawce_i_tytul((entry.get("summary") or "").strip())
-                wpis = tytul
-                if opis and opis.lower() != tytul.lower() and len(opis) < 220:
-                    wpis = f"{tytul}. {opis}"
-                klucz = re.sub(r"\W+", "", tytul.lower())
-                if tytul and klucz and klucz not in seen:
-                    seen.add(klucz)
-                    naglowki.append(wpis)
-                if len(naglowki) >= limit:
-                    break
-        return naglowki
-    except Exception as e:
-        logging.error(f"Błąd pobierania świeżych newsów RMF: {e}")
-        print(f"[RMF][ERROR] {e}", flush=True)
-        return []
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+    }
+
+    cache_buster = int(time.time())
+    zrodla = [
+        f"https://www.rmf24.pl/fakty/polska?v={cache_buster}",
+        f"https://www.rmf24.pl/fakty/rss?v={cache_buster}",
+    ]
+
+    surowe_naglowki: list[str] = []
+    for url in zrodla:
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200 or not resp.text:
+                print(f"[NEWS][WARN] {url} -> status {resp.status_code}", flush=True)
+                continue
+
+            if "rss" in url:
+                feed = feedparser.parse(resp.text)
+                for entry in getattr(feed, "entries", []) or []:
+                    if entry.get("title"):
+                        surowe_naglowki.append(entry.get("title"))
+            else:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for tag in soup.find_all(["h2", "h3", "a"]):
+                    txt = tag.get_text(" ", strip=True)
+                    if 22 <= len(txt) <= 160 and not txt.lower().startswith(("czytaj więcej", "zobacz", "więcej")):
+                        surowe_naglowki.append(txt)
+
+            if len(surowe_naglowki) >= limit:
+                break
+        except Exception as e:
+            logging.error(f"Błąd pobierania newsów z '{url}': {e}")
+            print(f"[NEWS][ERROR] {url}: {e}", flush=True)
+
+    return _wybierz_najwazniejsze_naglowki(surowe_naglowki, limit=limit)
 
 
 def pobierz_aktualne_newsy_rmf():
     naglowki = pobierz_swieze_naglowki_rmf(limit=3)
     if naglowki:
-        return "Najświeższe informacje z RMF FM: " + " ".join(naglowki)
+        return "Najważniejsze informacje: " + " ".join(naglowki)
     return ""
 
 
@@ -874,28 +930,27 @@ def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 150) -> str | None:
     teraz = datetime.now(STREFA_EUROPA)
     try:
         print(f"[NEWS] Start generowania serwisu news ({teraz.strftime('%Y-%m-%d %H:%M:%S')}) -> folder '{DIR_NEWS}/'", flush=True)
-        naglowki = pobierz_swieze_naglowki_rmf(limit=6)
-        print(f"[NEWS] Pobrano nagłówków RMF: {len(naglowki)}", flush=True)
+        naglowki = pobierz_swieze_naglowki_rmf(limit=5)
+        print(f"[NEWS] Wybrano najważniejszych nagłówków: {len(naglowki)}", flush=True)
         if not naglowki:
-            logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania serwisu news.")
-            print("[NEWS] Brak świeżych nagłówków RMF FM — przerwano przed generowaniem MP3.", flush=True)
+            logging.warning("Brak świeżych nagłówków do wygenerowania serwisu news.")
+            print("[NEWS] Brak świeżych nagłówków — przerwano przed generowaniem MP3.", flush=True)
             return None
 
         kwestie = [
-            ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd informacji z RMF FM."),
+            ("glos", f"Najważniejsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}."),
         ]
         laczna_dlugosc = len(kwestie[0][1])
-        limit_znakow = max(900, int(czas_trwania_sek * 11.0))
+        limit_znakow = max(550, min(900, int(czas_trwania_sek * 6.0)))
 
-        idx = 0
-        while laczna_dlugosc < limit_znakow and idx < len(naglowki) * 2:
-            bazowy = naglowki[idx % len(naglowki)]
-            tekst = f"Kolejna informacja z RMF FM: {bazowy}" if idx < len(naglowki) else f"Przypominamy: {bazowy}"
+        for idx, naglowek in enumerate(naglowki, start=1):
+            tekst = f"Wiadomość {idx}: {naglowek}"
+            if laczna_dlugosc + len(tekst) > limit_znakow and idx > 1:
+                break
             kwestie.append(("glos", tekst))
             laczna_dlugosc += len(tekst)
-            idx += 1
 
-        kwestie.append(("glos", f"To były informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
+        kwestie.append(("glos", f"To były najważniejsze informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
 
         nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
         sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
@@ -1230,9 +1285,7 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     czyste_zapytanie = oczysc_wykonawce_i_tytul(zapytanie) or zapytanie
     baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     warianty_zapytan = [
-        f"ytsearch1:{czyste_zapytanie} audio",
         f"scsearch1:{czyste_zapytanie}",
-        f"ytsearch1:{czyste_zapytanie}",
     ]
 
     opcje_ytdlp = {
