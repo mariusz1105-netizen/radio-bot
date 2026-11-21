@@ -8,7 +8,7 @@ import re
 import subprocess
 import threading
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
@@ -1119,7 +1119,99 @@ def wyczysc_raport_tygodniowy_po_wyslaniu() -> None:
             pass
 
 
+def pobierz_mp3_z_mygomp3(zapytanie: str, baza_nazwy_bez_rozsz: str) -> str | None:
+    fraza = (oczysc_wykonawce_i_tytul(zapytanie) or zapytanie or "").strip()
+    if not fraza:
+        return None
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+    }
+
+    search_urls = [
+        f"https://pl.mygomp3.com/szukaj/{quote(fraza)}",
+        f"https://pl.mygomp3.com/?s={quote(fraza)}",
+    ]
+
+    kandydaci_audio: list[str] = []
+    podstrony_utworow: list[str] = []
+
+    for s_url in search_urls:
+        try:
+            resp = requests.get(s_url, headers=headers, timeout=8)
+            if resp.status_code != 200 or not resp.text:
+                continue
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = urljoin("https://pl.mygomp3.com/", a["href"].strip())
+                low = href.lower()
+                if ".mp3" in low and href not in kandydaci_audio:
+                    kandydaci_audio.append(href)
+                elif (
+                    "mygomp3.com" in low
+                    and any(x in low for x in ("/mp3/", "/song/", "/download/", "/pobierz/", "/utwor/"))
+                    and href not in podstrony_utworow
+                ):
+                    podstrony_utworow.append(href)
+            if kandydaci_audio or podstrony_utworow:
+                break
+        except Exception as e:
+            logging.warning(f"[MYGOMP3] Błąd wyszukiwania '{s_url}': {e}")
+
+    for p_url in podstrony_utworow[:3]:
+        try:
+            r_sub = requests.get(p_url, headers=headers, timeout=8)
+            if r_sub.status_code != 200 or not r_sub.text:
+                continue
+            sub_soup = BeautifulSoup(r_sub.text, "html.parser")
+            for tag in sub_soup.find_all(["a", "audio", "source"]):
+                raw_link = tag.get("href") or tag.get("src") or ""
+                if not raw_link:
+                    continue
+                full_link = urljoin(p_url, raw_link.strip())
+                if ".mp3" in full_link.lower() and full_link not in kandydaci_audio:
+                    kandydaci_audio.append(full_link)
+        except Exception as e:
+            logging.warning(f"[MYGOMP3] Błąd podstrony '{p_url}': {e}")
+
+    docelowy_mp3 = os.path.join(FOLDER_ROBOCZY, f"{baza_nazwy_bez_rozsz}.mp3")
+    for audio_url in kandydaci_audio[:5]:
+        try:
+            r_dl = requests.get(audio_url, headers=headers, timeout=15, stream=True)
+            ctype = (r_dl.headers.get("Content-Type") or "").lower()
+            if r_dl.status_code != 200 or "text/html" in ctype:
+                continue
+            zapisano = 0
+            with open(docelowy_mp3, "wb") as f:
+                for chunk in r_dl.iter_content(chunk_size=16384):
+                    if chunk:
+                        f.write(chunk)
+                        zapisano += len(chunk)
+            if zapisano > 50000:
+                logging.info(f"[MYGOMP3] Pobrano '{fraza}' z '{audio_url}' ({zapisano} B)")
+                return docelowy_mp3
+            if os.path.exists(docelowy_mp3):
+                os.remove(docelowy_mp3)
+        except Exception as e:
+            logging.warning(f"[MYGOMP3] Błąd pobierania pliku '{audio_url}': {e}")
+            if os.path.exists(docelowy_mp3):
+                try:
+                    os.remove(docelowy_mp3)
+                except Exception:
+                    pass
+
+    return None
+
+
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
+    plik_mygomp3 = pobierz_mp3_z_mygomp3(zapytanie, nazwa_docelowa_bez_rozsz)
+    if plik_mygomp3 and os.path.exists(plik_mygomp3):
+        return plik_mygomp3
+
     czyste_zapytanie = oczysc_wykonawce_i_tytul(zapytanie) or zapytanie
     baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     warianty_zapytan = [
