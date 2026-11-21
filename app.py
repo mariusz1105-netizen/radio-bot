@@ -11,6 +11,7 @@ import time
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+from bs4 import BeautifulSoup
 import edge_tts
 import feedparser
 from flask import Flask, jsonify, render_template_string, request
@@ -35,6 +36,7 @@ DIR_STATIC_OUTPUT = "static/output"
 PLIK_TERMINY_REKLAM = os.path.join(FOLDER_ROBOCZY, "reklamy_terminy.json")
 PLIK_HISTORIA_TEKSTOW = os.path.join(FOLDER_ROBOCZY, "historia_teksty.json")
 PLIK_HISTORIA_POBRANYCH = os.path.join(FOLDER_ROBOCZY, "historia_pobranych.json")
+PLIK_HISTORIA_KAWALY = os.path.join(FOLDER_ROBOCZY, "historia_kawaly.json")
 PLIK_RAPORT_TYGODNIOWY = os.path.join(FOLDER_ROBOCZY, "raport_tygodniowy.json")
 PLIK_RAPORT_TYGODNIOWY_TXT = os.path.join(FOLDER_ROBOCZY, "raport_tygodniowy.txt")
 
@@ -189,6 +191,12 @@ KAWAŁY_O_JASIU = [
         "Tata: Szuka usterki, synku. "
         "Jasio: A jak znajdzie, to ją pogłaszcze czy z nią porozmawia?"
     ),
+]
+
+ZRODLA_KAWALOW_URL = [
+    "https://www.dowcipy.pl/losowy.php",
+    "https://dowcipy.jeja.pl/",
+    "https://kwejk.pl/kategoria/dowcipy",
 ]
 
 SPOTY_REKLAMOWE_BAZA = [
@@ -366,6 +374,7 @@ ROZBIJANIE_SKLEJONYCH = {
 
 terminy_lock = threading.Lock()
 historia_lock = threading.Lock()
+kawaly_lock = threading.Lock()
 pobrane_lock = threading.Lock()
 
 
@@ -1270,28 +1279,191 @@ def _generuj_smiech_i_brawa() -> AudioSegment:
     return effects.normalize(polaczone).fade_in(100).fade_out(250) - 4
 
 
+def _klucz_kawalu(tekst: str) -> str:
+    return re.sub(r"\s+", " ", (tekst or "").strip().lower())
+
+
+def _wczytaj_historie_kawaly() -> list[str]:
+    if not os.path.exists(PLIK_HISTORIA_KAWALY):
+        return []
+    try:
+        with open(PLIK_HISTORIA_KAWALY, "r", encoding="utf-8") as f:
+            dane = json.load(f)
+            return [str(x) for x in dane] if isinstance(dane, list) else []
+    except Exception:
+        return []
+
+
+def _zapisz_historie_kawaly(lista: list[str]) -> None:
+    try:
+        with open(PLIK_HISTORIA_KAWALY, "w", encoding="utf-8") as f:
+            json.dump(lista[-1500:], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Błąd zapisu historii kawałów: {e}")
+
+
+def pobierz_kawaly_z_sieci(urls: list[str] | None = None, max_z_zrodla: int = 25) -> list[str]:
+    """Pobiera i czyści kawały ze stron przez requests + BeautifulSoup."""
+    zrodla = urls or ZRODLA_KAWALOW_URL
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    zebrane: list[str] = []
+    widziane_w_pobraniu: set[str] = set()
+
+    for url in zrodla:
+        try:
+            resp = requests.get(url, headers=headers, timeout=12)
+            if resp.status_code != 200 or not resp.text:
+                continue
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form", "noscript"]):
+                tag.decompose()
+
+            kandydaci: list[str] = []
+            for el in soup.find_all(["p", "div", "article", "blockquote"]):
+                oczyszczony = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
+                if 55 <= len(oczyszczony) <= 1200:
+                    kandydaci.append(oczyszczony)
+
+            random.shuffle(kandydaci)
+            dodane_z_url = 0
+
+            for tekst in kandydaci:
+                klucz = _klucz_kawalu(tekst)
+                if not klucz or klucz in widziane_w_pobraniu:
+                    continue
+                if any(
+                    smiec in klucz
+                    for smiec in (
+                        "cookies",
+                        "polityka prywatności",
+                        "regulamin",
+                        "zaloguj",
+                        "zarejestruj",
+                        "wszystkie prawa zastrzeżone",
+                        "reklama",
+                    )
+                ):
+                    continue
+
+                widziane_w_pobraniu.add(klucz)
+                zebrane.append(tekst)
+                dodane_z_url += 1
+                if dodane_z_url >= max_z_zrodla:
+                    break
+
+        except Exception as e:
+            logging.warning(f"[KAWALY] Błąd pobierania z '{url}': {e}")
+
+    return zebrane
+
+
+def _filtruj_temat_kawaly(pula: list[str], rodzaj: str) -> list[str]:
+    rodzaj_norm = (rodzaj or "").strip().lower()
+    if rodzaj_norm in ("masztalski", "baca", "goral", "góral", "klub_masztalskiego"):
+        slowa = ("baca", "góral", "goral", "masztalski", "halny", "owiecz", "bacówka", "ceper", "gaździn")
+    elif rodzaj_norm in ("jas", "jasio", "kacik_jasia", "kącik_jasia"):
+        slowa = ("jasio", "jasiu", "pani", "nauczyciel", "mama", "tata")
+    else:
+        slowa = ()
+
+    if not slowa:
+        return list(pula)
+
+    pasujace = [k for k in pula if any(s in k.lower() for s in slowa)]
+    if len(pasujace) < 4:
+        reszta = [k for k in pula if k not in pasujace]
+        random.shuffle(reszta)
+        pasujace.extend(reszta)
+    return pasujace
+
+
+def wybierz_kawaly_bez_powtorek(rodzaj: str = "masztalski", ile_maks: int = 25) -> list[str]:
+    """Łączy pobrane kawały z sieci i zapasową pulę, pilnując braku powtórek w audycji i historii."""
+    with kawaly_lock:
+        historia = _wczytaj_historie_kawaly()
+        uzyte_w_historii = set(historia)
+        uzyte_w_audycji: set[str] = set()
+        wybrane: list[str] = []
+
+        pobrane_z_sieci = pobierz_kawaly_z_sieci()
+        zapas = list(KAWAŁY_O_JASIU) if (rodzaj or "").lower() in ("jas", "jasio") else list(KAWAŁY_MASZTALSKI_I_BACA)
+        random.shuffle(zapas)
+
+        pula_tematyczna = _filtruj_temat_kawaly(pobrane_z_sieci, rodzaj) + zapas
+        pula_ogolna = list(pobrane_z_sieci) + list(KAWAŁY_MASZTALSKI_I_BACA) + list(KAWAŁY_O_JASIU)
+
+        for k in pula_tematyczna:
+            klucz = _klucz_kawalu(k)
+            if not klucz or klucz in uzyte_w_audycji or klucz in uzyte_w_historii:
+                continue
+            wybrane.append(k)
+            uzyte_w_audycji.add(klucz)
+            if len(wybrane) >= ile_maks:
+                break
+
+        if len(wybrane) < ile_maks:
+            for k in pula_ogolna:
+                klucz = _klucz_kawalu(k)
+                if not klucz or klucz in uzyte_w_audycji or klucz in uzyte_w_historii:
+                    continue
+                wybrane.append(k)
+                uzyte_w_audycji.add(klucz)
+                if len(wybrane) >= ile_maks:
+                    break
+
+        if len(wybrane) < min(5, ile_maks):
+            uzyte_w_historii.clear()
+            for k in pula_tematyczna + pula_ogolna:
+                klucz = _klucz_kawalu(k)
+                if not klucz or klucz in uzyte_w_audycji:
+                    continue
+                wybrane.append(k)
+                uzyte_w_audycji.add(klucz)
+                if len(wybrane) >= ile_maks:
+                    break
+
+        nowa_historia = list(historia)
+        for k in wybrane:
+            klucz = _klucz_kawalu(k)
+            if klucz:
+                nowa_historia.append(klucz)
+        _zapisz_historie_kawaly(nowa_historia)
+
+        logging.info(
+            f"[KAWALY] Pobrano z sieci: {len(pobrane_z_sieci)}, wybrano unikalnych ({rodzaj}): {len(wybrane)}"
+        )
+        return wybrane
+
+
 def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> list[tuple[str, str]]:
     if rodzaj == "jas":
         powitanie = "Witajcie w Kąciku Jasia w Radiu Strefa Zero! Zaczynamy pięć minut z najlepszymi kawałami o Jasiu."
         pozegnanie = "I to by było na tyle w Kąciku Jasia w Radiu Strefa Zero! Słuchajcie nas dalej i śmiejcie się do rozpuku."
-        pula = list(KAWAŁY_O_JASIU)
     else:
         powitanie = "Witajcie w Klubie Masztalskiego w Radiu Strefa Zero! Pięć minut mocnych kawałów w stylu masztalskiego i bacy."
         pozegnanie = "Koniec audycji Klub Masztalskiego w Radiu Strefa Zero! Trzymajcie się ciepło i słuchajcie nas dalej."
-        pula = list(KAWAŁY_MASZTALSKI_I_BACA)
 
-    random.shuffle(pula)
+    pula = wybierz_kawaly_bez_powtorek(rodzaj=rodzaj, ile_maks=25)
     kwestie = [("glos", powitanie)]
     laczna_dlugosc = len(powitanie)
     limit_znakow = max(2400, int(czas_trwania_sek * 13.5))
 
-    ostatni_kawal = ""
-    while laczna_dlugosc < limit_znakow:
-        kandydaci = [k for k in pula if k != ostatni_kawal] or pula
-        kawal = random.choice(kandydaci)
-        ostatni_kawal = kawal
+    uzyte_klucze: set[str] = set()
+    for kawal in pula:
+        klucz = _klucz_kawalu(kawal)
+        if not klucz or klucz in uzyte_klucze:
+            continue
+        uzyte_klucze.add(klucz)
         kwestie.append(("kawal", kawal))
         laczna_dlugosc += len(kawal)
+        if laczna_dlugosc >= limit_znakow:
+            break
 
     kwestie.append(("glos", pozegnanie))
     return kwestie
@@ -1769,7 +1941,7 @@ def endpoint_generuj_mix():
     )
 
     zdalna = wygeneruj_mix_z_folderu(
-        folder_gatunkowy=folder_gatunkowy,
+        folder_gatunkowy=folder_gatunek,
         liczba_utworow=liczba,
         crossfade_ms=crossfade_ms,
         folder_docelowy=folder_docelowy,
