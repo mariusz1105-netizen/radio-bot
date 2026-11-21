@@ -9,3 +9,4 @@ pydub
 certifi
 urllib3
 edge-tts
+beautifulsoup4
