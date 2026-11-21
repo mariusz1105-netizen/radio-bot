@@ -72,6 +72,7 @@ DIR_AUDYCJE_SPECJALNE = "audycje_specjalne"
 DIR_CIEKAWOSTKI = "ciekawostki"
 DIR_NOCNE_RADIO = "nocne_radio"
 DIR_RADIO = "radio"
+DIR_KAWALY = "kawaly"
 
 FOLDERY_GATUNKOWE = [
     "disco polo",
@@ -97,6 +98,7 @@ WSZYSTKIE_FOLDERY_SFTP = (
     DIR_CIEKAWOSTKI,
     DIR_NOCNE_RADIO,
     DIR_RADIO,
+    DIR_KAWALY,
 ) + tuple(FOLDERY_GATUNKOWE)
 
 STREFA_EUROPA = ZoneInfo(os.environ.get("TIMEZONE", "Europe/Warsaw"))
@@ -132,6 +134,61 @@ NOCNE_WEJSCIA_KLUBOWE = [
     "Nocne Radio w Strefie Zero trwa. Wchodzimy w nocny klimat klubowy — zostań z nami do samego rana!",
     "Środek nocy w Radiu Strefa Zero. Podkręcamy nocną selekcję i lecimy dalej z dobrym brzmieniem.",
     "Nocna zmiana w Radiu Strefa Zero! Klubowe uderzenie, zero pośpiechu i pełen ogień na głośnikach.",
+]
+
+KAWAŁY_MASZTALSKI_I_BACA = [
+    (
+        "Przychodzi baca do lekarza i mówi: Panie doktorze, jak się rano budzę, to mnie wszystko boli. "
+        "Lekarz bada, bada i pyta: A o której się baca kładzie? "
+        "A baca na to: Ano tak koło drugiej w nocy, jak już w telewizji nie ma na co patrzeć!"
+    ),
+    (
+        "Spotykają się dwaj górale na hali. Jeden pyta: Słuchaj, Jędrek, czemu ty tak głośno gadasz do tej owcy? "
+        "A Jędrek na to: Bo mi wczoraj powiedziała, że w tym roku wełna będzie droższa!"
+    ),
+    (
+        "Baca kupił sobie nowy zegarek, co pokazuje godziny, minuty, sekundy i fazy księżyca. "
+        "Wraca do chałupy, patrzy na niego i mówi do gaździny: Zośka, patrz! Miesiąc pełny, a my jeszcze węgla nie przywieźli!"
+    ),
+    (
+        "Idzie baca przez las i widzi leżącą piłę motorową. Podnosi, ogląda, szarpie za sznurek — nic. "
+        "Zaczyna szarpać mocniej, aż w końcu piła odpaliła: WRRRRR! "
+        "Baca się przeżegnał i mówi: O cholera... sama się włączyła!"
+    ),
+    (
+        "Siedzi baca na przyzbie i pyta wnuczka: Wnuku, a co to jest ten cały internet? "
+        "Wnuczek tłumaczy: Dziadku, to taka wielka sieć, gdzie wszystko można znaleźć. "
+        "Baca pokiwał głową: Aha... to dlatego moja gaździna zawsze mówi, że w sieci to najlepiej ryby biorą!"
+    ),
+]
+
+KAWAŁY_O_JASIU = [
+    (
+        "Pani w szkole pyta Jasia: Jasiu, wymień trzy zwierzęta, które żyją na pustyni. "
+        "Jasio myśli, myśli i mówi: Wielbłąd... i dwa inne wielbłądy!"
+    ),
+    (
+        "Mama mówi do Jasia: Jasiu, idź umyj ręce przed obiadem. "
+        "Jasio stoi przy kranie przez minutę i wraca. "
+        "Mama patrzy i pyta: Przecież są suche! "
+        "A Jasio na to: Bo ja je w powietrzu wysuszyłem, żeby nie kapało na podłogę!"
+    ),
+    (
+        "Tata pyta Jasia: Jasiu, dlaczego masz jedynkę z matematyki? "
+        "Jasio: Bo pani zadała pytanie, na które nikt nie znał odpowiedzi. "
+        "Tata: Jakie? "
+        "Jasio: Ile to jest siedem razy osiem? Przecież to się co chwilę zmienia!"
+    ),
+    (
+        "Jasio wraca ze szkoły i mówi: Tato, dzisiaj byłem taki odważny, że aż mnie podziwiali! "
+        "Tata dumny: Brawo synku! A co takiego zrobiłeś? "
+        "Jasio: Podłożyłem nogę największemu chłopakowi w klasie i uciekłem za szafę!"
+    ),
+    (
+        "Jasio patrzy, jak tata naprawia samochód, i pyta: Tato, a po co ten mechanik włożył głowę pod maskę? "
+        "Tata: Szuka usterki, synku. "
+        "Jasio: A jak znajdzie, to ją pogłaszcze czy z nią porozmawia?"
+    ),
 ]
 
 # Katalogi utworów (3 utwory dziennie na folder)
@@ -1022,6 +1079,151 @@ def uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder: int = 3) 
     return podsumowanie
 
 
+def _generuj_smiech_i_brawa() -> AudioSegment:
+    """Generuje efekt śmiechu i oklasków publiczności po kawale (lub używa pliku static/music/smiech_brawa.mp3, jeśli istnieje)."""
+    wlasny_plik = os.path.join(DIR_STATIC_MUSIC, "smiech_brawa.mp3")
+    if os.path.exists(wlasny_plik) and os.path.getsize(wlasny_plik) > 1024:
+        try:
+            return effects.normalize(AudioSegment.from_file(wlasny_plik)[:3600]).fade_in(120).fade_out(300)
+        except Exception:
+            pass
+
+    rng = random.Random(int(time.time() * 1000) % 100000)
+    brawa = AudioSegment.silent(duration=0)
+    for step in range(28):
+        dl = rng.randint(35, 75)
+        szum = AudioSegment.from_mono_audiosegments(
+            Sine(rng.randint(420, 980)).to_audio_segment(duration=dl)
+        ).high_pass_filter(500).low_pass_filter(3200)
+        gain_step = -26 + min(12, step * 0.45) + rng.uniform(-3.0, 2.5)
+        brawa += szum.apply_gain(gain_step).fade_in(5).fade_out(10) + AudioSegment.silent(duration=rng.randint(25, 75))
+
+    smiech = AudioSegment.silent(duration=0)
+    for _ in range(4):
+        fala_seg = AudioSegment.silent(duration=0)
+        base_freq = rng.randint(185, 255)
+        for _ in range(rng.randint(4, 6)):
+            sylaba = Sine(base_freq + rng.randint(-18, 18)).to_audio_segment(duration=110)
+            sylaba = sylaba.low_pass_filter(1400).apply_gain(-16 + rng.uniform(-2.0, 2.0)).fade_in(20).fade_out(35)
+            fala_seg += sylaba + AudioSegment.silent(duration=75)
+        smiech += fala_seg + AudioSegment.silent(duration=140)
+
+    polaczone = brawa.overlay(smiech, position=250)
+    return effects.normalize(polaczone).fade_in(100).fade_out(250) - 4
+
+
+def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> list[tuple[str, str]]:
+    """Buduje listę kwestii dla audycji po ok. 5 min (300 s): 'masztalski' albo 'jas'."""
+    if rodzaj == "jas":
+        powitanie = "Witajcie w Kąciku Jasia w Radiu Strefa Zero! Zaczynamy pięć minut z najlepszymi kawałami o Jasiu."
+        pozegnanie = "I to by było na tyle w Kąciku Jasia w Radiu Strefa Zero! Słuchajcie nas dalej i śmiejcie się do rozpuku."
+        pula = list(KAWAŁY_O_JASIU)
+    else:
+        powitanie = "Witajcie w Klubie Masztalskiego w Radiu Strefa Zero! Pięć minut mocnych kawałów w stylu masztalskiego i bacy."
+        pozegnanie = "Koniec audycji Klub Masztalskiego w Radiu Strefa Zero! Trzymajcie się ciepło i słuchajcie nas dalej."
+        pula = list(KAWAŁY_MASZTALSKI_I_BACA)
+
+    random.shuffle(pula)
+    kwestie = [("glos", powitanie)]
+    laczna_dlugosc = len(powitanie)
+    limit_znakow = max(1200, int(czas_trwania_sek * 11.5))
+
+    ostatni_kawal = ""
+    while laczna_dlugosc < limit_znakow:
+        kandydaci = [k for k in pula if k != ostatni_kawal] or pula
+        kawal = random.choice(kandydaci)
+        ostatni_kawal = kawal
+        kwestie.append(("kawal", kawal))
+        laczna_dlugosc += len(kawal)
+
+    kwestie.append(("glos", pozegnanie))
+    return kwestie
+
+
+def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> str | None:
+    """Generuje 5-minutową audycję z kawałami + śmiechem i oklaskami po każdym kawale i wysyła do folderu kawaly."""
+    kwestie = zbuduj_audycje_kawaly(rodzaj=rodzaj, czas_trwania_sek=czas_trwania_sek)
+    znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
+    prefix = "klub_masztalskiego" if rodzaj != "jas" else "kacik_jasia"
+    nazwa_pliku = f"{prefix}_{znacznik}.mp3"
+    sciezka_koncowa = os.path.join(FOLDER_ROBOCZY, nazwa_pliku)
+
+    profil = PULA_BOTOW["marek_bas"] if rodzaj != "jas" else PULA_BOTOW["marek_standard"]
+    reakcja_pub = _generuj_smiech_i_brawa()
+    cisza = AudioSegment.silent(duration=350)
+    pliki_tymczasowe = []
+
+    try:
+        polaczony = AudioSegment.empty()
+        for idx, (typ_kwestii, tekst) in enumerate(kwestie):
+            oczyszczony = oczysc_tekst_do_tts(tekst, czy_sms=False)
+            if not oczyszczony:
+                continue
+            temp_path = os.path.join(FOLDER_ROBOCZY, f"kaw_{idx}_{nazwa_pliku}")
+            uruchom_async(
+                async_generuj_edge_tts(
+                    oczyszczony,
+                    temp_path,
+                    profil["voice"],
+                    pitch=profil["pitch"],
+                    rate=profil["rate"],
+                    silnik="auto",
+                    gruby_glos=(rodzaj != "jas"),
+                )
+            )
+            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                pliki_tymczasowe.append(temp_path)
+                seg = AudioSegment.from_file(temp_path)
+                polaczony += seg + cisza
+                if typ_kwestii == "kawal":
+                    polaczony += reakcja_pub + cisza
+
+        if len(polaczony) == 0:
+            return None
+
+        polaczony = effects.normalize(polaczony)
+        polaczony.export(sciezka_koncowa, format="mp3", bitrate="128k")
+
+        transport, sftp = polacz_sftp()
+        try:
+            zdalna_sciezka = f"{DIR_KAWALY}/{nazwa_pliku}"
+            wyslij_i_zsynchronizuj(sftp, sciezka_koncowa, zdalna_sciezka)
+            logging.info(f"Wysłano audycję '{prefix}' (~5 min) do '{zdalna_sciezka}'.")
+            return zdalna_sciezka
+        finally:
+            sftp.close()
+            transport.close()
+    except Exception as e:
+        logging.error(f"Błąd generowania audycji kawałów '{rodzaj}': {e}")
+        return None
+    finally:
+        if os.path.exists(sciezka_koncowa):
+            try:
+                os.remove(sciezka_koncowa)
+            except Exception:
+                pass
+        for f_tmp in pliki_tymczasowe:
+            if os.path.exists(f_tmp):
+                try:
+                    os.remove(f_tmp)
+                except Exception:
+                    pass
+
+
+def _godziny_kawaly_co_40_min() -> set[str]:
+    start_min = 12 * 60 + 7   # 727
+    koniec_min = 16 * 60 + 54 # 1014
+    terminy = set()
+    m = start_min
+    while m <= koniec_min:
+        terminy.add(f"{m // 60:02d}:{m % 60:02d}")
+        m += 40
+    return terminy
+
+
+GODZINY_KAWALY_CO_40_MIN = _godziny_kawaly_co_40_min()
+
+
 def zbuduj_tylko_godzine(docelowa_godzina_24h):
     slownik_godzin = {
         0: "północ", 1: "pierwsza w nocy", 2: "druga w nocy", 3: "trzecia w nocy",
@@ -1350,6 +1552,17 @@ def endpoint_pobierz_teraz():
 def endpoint_raport_tygodniowy():
     tekst = generuj_i_zapisz_raport_tygodniowy()
     return f"<pre>{tekst}</pre>", 200
+
+
+@app.route("/test-kawaly", methods=["GET"])
+def endpoint_test_kawaly():
+    rodzaj = (request.values.get("rodzaj") or "masztalski").strip().lower()
+    if rodzaj not in ("masztalski", "jas"):
+        rodzaj = "masztalski"
+    zdalna = wygeneruj_i_wyslij_audycje_kawaly(rodzaj=rodzaj, czas_trwania_sek=300)
+    if zdalna:
+        return jsonify({"status": "success", "rodzaj": rodzaj, "remote_file": zdalna}), 200
+    return jsonify({"status": "error", "message": "Nie udało się wygenerować audycji z kawałami."}), 500
 
 
 @app.route("/generuj-mix", methods=["GET", "POST"])
@@ -1908,12 +2121,14 @@ def endpoint_generuj_jingle_ai():
 def index_glowna():
     return """
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, reklam z terminem, puli botów, mixów i dziennego pobierania działa.</p>
+    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, reklam z terminem, puli botów, mixów, audycji kawałów i dziennego pobierania działa.</p>
     <ul>
         <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser, Raport i Logi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny (5 pików)</a></li>
         <li><a href="/pobierz-teraz">Wymuś teraz pobranie po 3 utwory do 5 folderów</a></li>
         <li><a href="/raport-tygodniowy">Podgląd raportu tygodniowego pobranych utworów</a></li>
+        <li><a href="/test-kawaly?rodzaj=masztalski">Test audycji: Klub Masztalskiego (~5 min + śmiech/brawa)</a></li>
+        <li><a href="/test-kawaly?rodzaj=jas">Test audycji: Kącik Jasia (~5 min + śmiech/brawa)</a></li>
         <li><a href="/generuj-mix?folder=muzyka%20klubowa&count=3">Test generowania mixu (muzyka klubowa)</a></li>
     </ul>
     """
@@ -1975,6 +2190,7 @@ def petla_harmonogramu_w_tle():
     ostatnie_czyszczenie_ts = 0
     ostatni_dzien_pobierania = ""
     ostatni_raport_tydzien = ""
+    licznik_audycji_kawaly = 0
 
     while True:
         try:
@@ -2004,6 +2220,7 @@ def petla_harmonogramu_w_tle():
                         DIR_WSTAWKI_AI,
                         DIR_CIEKAWOSTKI,
                         DIR_NOCNE_RADIO,
+                        DIR_KAWALY,
                     )
                     for folder_t in foldery_do_czyszczenia:
                         try:
@@ -2048,6 +2265,12 @@ def petla_harmonogramu_w_tle():
                 generuj_i_zapisz_raport_tygodniowy()
                 wyczysc_raport_tygodniowy_po_wyslaniu()
                 ostatni_raport_tydzien = klucz_niedzieli
+
+            # Audycje kawałów (Klub Masztalskiego / Kącik Jasia, ~5 min każda) co 40 min od 12:07 do 16:54
+            if hhmm in GODZINY_KAWALY_CO_40_MIN and _raz_na_minute(f"kawaly_{klucz_min}"):
+                rodzaj_audycji = "masztalski" if (licznik_audycji_kawaly % 2 == 0) else "jas"
+                licznik_audycji_kawaly += 1
+                wygeneruj_i_wyslij_audycje_kawaly(rodzaj=rodzaj_audycji, czas_trwania_sek=300)
 
             if teraz.minute == 40:
                 docelowa_godzina = (teraz.hour + 1) % 24
