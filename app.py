@@ -839,7 +839,7 @@ def generuj_audio_mp3(
                     pass
 
 
-def _wybierz_najwazniejsze_naglowki(kandydaci: list[str], limit: int = 5) -> list[str]:
+def _wybierz_najwazniejsze_naglowki(kandydaci: list[str], limit: int = 4) -> list[str]:
     oczyszczone: list[str] = []
     widziane: set[str] = set()
 
@@ -870,7 +870,111 @@ def _wybierz_najwazniejsze_naglowki(kandydaci: list[str], limit: int = 5) -> lis
     return wybrane
 
 
-def pobierz_swieze_naglowki_rmf(limit: int = 5) -> list[str]:
+def _pobierz_krotka_pogode() -> str:
+    try:
+        url = (
+            "https://api.open-meteo.com/v1/forecast"
+            "?latitude=52.23&longitude=21.01&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe%2FWarsaw"
+        )
+        resp = requests.get(url, timeout=6)
+        if resp.status_code != 200:
+            return ""
+        cur = (resp.json() or {}).get("current") or {}
+        temp = cur.get("temperature_2m")
+        wiatr = cur.get("wind_speed_10m")
+        kod = int(cur.get("weather_code", -1))
+
+        opisy_kodow = {
+            0: "bezchmurne niebo",
+            1: "przeważnie słonecznie",
+            2: "częściowe zachmurzenie",
+            3: "pochmurno",
+            45: "lokalne mgły",
+            48: "mgły",
+            51: "słaba mżawka",
+            61: "przelotny deszcz",
+            63: "opady deszczu",
+            71: "słabe opady śniegu",
+            73: "opady śniegu",
+            80: "przelotne opady",
+            95: "burze",
+        }
+        stan = opisy_kodow.get(kod, "zmienne zachmurzenie")
+        if temp is not None:
+            temp_zaokr = round(float(temp))
+            wiatr_str = f", wiatr około {round(float(wiatr))} kilometrów na godzinę" if wiatr is not None else ""
+            return f"Na koniec krótka prognoza pogody: w kraju {stan}, temperatura około {temp_zaokr} stopni Celsjusza{wiatr_str}."
+    except Exception as e:
+        logging.debug(f"Pogoda Open-Meteo pominięta: {e}")
+    return ""
+
+
+def _stresc_artykul_rmf(url_artykulu: str, tytul_bazowy: str, headers: dict) -> str:
+    try:
+        resp = requests.get(url_artykulu, headers=headers, timeout=8)
+        if resp.status_code != 200 or not resp.text:
+            return tytul_bazowy
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for smiec in soup(["script", "style", "nav", "footer", "header", "aside", "form", "figure"]):
+            smiec.decompose()
+
+        kontener = soup.find("article") or soup.find("div", class_=re.compile(r"article|content|body", re.I)) or soup
+        akapity = []
+        for p in kontener.find_all("p"):
+            txt = re.sub(r"\s+", " ", p.get_text(" ", strip=True)).strip()
+            if len(txt) < 45:
+                continue
+            low = txt.lower()
+            if any(
+                fraz in low
+                for fraz in (
+                    "więcej informacji wkrótce",
+                    "czytaj również",
+                    "zobacz także",
+                    "autor:",
+                    "publikacja:",
+                    "posłuchaj artykułu",
+                    "czytane głosem ai",
+                    "udostępnij",
+                    "polityka prywatności",
+                    "cookies",
+                )
+            ):
+                continue
+            akapity.append(txt)
+            if len(akapity) >= 3:
+                break
+
+        if not akapity:
+            return tytul_bazowy
+
+        pelny_tekst = " ".join(akapity)
+        zdania = re.split(r"(?<=[.!?])\s+", pelny_tekst)
+        wybrane_zdania: list[str] = []
+        widziane_fragmenty: set[str] = set()
+
+        for z in zdania:
+            z_clean = oczysc_wykonawce_i_tytul(z)
+            if len(z_clean) < 25:
+                continue
+            klucz = re.sub(r"\W+", "", z_clean.lower())[:45]
+            if not klucz or klucz in widziane_fragmenty:
+                continue
+            widziane_fragmenty.add(klucz)
+            wybrane_zdania.append(z_clean)
+            if len(wybrane_zdania) >= 2:
+                break
+
+        if wybrane_zdania:
+            return ". ".join(wybrane_zdania) + "."
+    except Exception as e:
+        logging.debug(f"Nie udało się streścić artykułu '{url_artykulu}': {e}")
+
+    return tytul_bazowy
+
+
+def pobierz_swieze_naglowki_rmf(limit: int = 4) -> list[str]:
     teraz = datetime.now(STREFA_EUROPA)
     if teraz.weekday() not in INFO_RMF_DNI or not (INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC):
         return []
@@ -885,38 +989,61 @@ def pobierz_swieze_naglowki_rmf(limit: int = 5) -> list[str]:
     }
 
     cache_buster = int(time.time())
-    zrodla = [
-        f"https://www.rmf24.pl/fakty/polska?v={cache_buster}",
-        f"https://www.rmf24.pl/fakty/rss?v={cache_buster}",
-    ]
+    url_strona = f"https://www.rmf24.pl/fakty/polska?v={cache_buster}"
+    url_rss = f"https://www.rmf24.pl/fakty/rss?v={cache_buster}"
 
-    surowe_naglowki: list[str] = []
-    for url in zrodla:
+    kandydaci_linki: list[tuple[str, str]] = []
+    widziane: set[str] = set()
+
+    try:
+        resp = requests.get(url_strona, headers=headers, timeout=10)
+        if resp.status_code == 200 and resp.text:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = urljoin("https://www.rmf24.pl/", a["href"].strip())
+                txt = oczysc_wykonawce_i_tytul(a.get_text(" ", strip=True))
+                if (
+                    "rmf24.pl/fakty/" in href
+                    and ",nId," in href
+                    and 24 <= len(txt) <= 150
+                ):
+                    klucz = re.sub(r"\W+", "", txt.lower())
+                    if klucz and klucz not in widziane:
+                        widziane.add(klucz)
+                        kandydaci_linki.append((txt, href))
+    except Exception as e:
+        print(f"[NEWS][WARN] Błąd pobierania listy z RMF24 HTML: {e}", flush=True)
+
+    if not kandydaci_linki:
         try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code != 200 or not resp.text:
-                print(f"[NEWS][WARN] {url} -> status {resp.status_code}", flush=True)
-                continue
-
-            if "rss" in url:
-                feed = feedparser.parse(resp.text)
+            r_rss = requests.get(url_rss, headers=headers, timeout=10)
+            if r_rss.status_code == 200 and r_rss.text:
+                feed = feedparser.parse(r_rss.text)
                 for entry in getattr(feed, "entries", []) or []:
-                    if entry.get("title"):
-                        surowe_naglowki.append(entry.get("title"))
-            else:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                for tag in soup.find_all(["h2", "h3", "a"]):
-                    txt = tag.get_text(" ", strip=True)
-                    if 22 <= len(txt) <= 160 and not txt.lower().startswith(("czytaj więcej", "zobacz", "więcej")):
-                        surowe_naglowki.append(txt)
-
-            if len(surowe_naglowki) >= limit:
-                break
+                    txt = oczysc_wykonawce_i_tytul((entry.get("title") or "").strip())
+                    link = (entry.get("link") or "").strip()
+                    klucz = re.sub(r"\W+", "", txt.lower())
+                    if txt and klucz and klucz not in widziane:
+                        widziane.add(klucz)
+                        kandydaci_linki.append((txt, link))
         except Exception as e:
-            logging.error(f"Błąd pobierania newsów z '{url}': {e}")
-            print(f"[NEWS][ERROR] {url}: {e}", flush=True)
+            print(f"[NEWS][WARN] Błąd pobierania RSS RMF24: {e}", flush=True)
 
-    return _wybierz_najwazniejsze_naglowki(surowe_naglowki, limit=limit)
+    if not kandydaci_linki:
+        return []
+
+    wybrane_tytuly = _wybierz_najwazniejsze_naglowki([t for t, _ in kandydaci_linki], limit=limit)
+    mapa_linkow = {t: u for t, u in kandydaci_linki}
+
+    streszczenia: list[str] = []
+    for tytul in wybrane_tytuly:
+        link = mapa_linkow.get(tytul, "")
+        if link:
+            streszczenia.append(_stresc_artykul_rmf(link, tytul, headers))
+        else:
+            streszczenia.append(tytul)
+
+    return streszczenia
 
 
 def pobierz_aktualne_newsy_rmf():
@@ -929,35 +1056,47 @@ def pobierz_aktualne_newsy_rmf():
 def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 150) -> str | None:
     teraz = datetime.now(STREFA_EUROPA)
     try:
-        print(f"[NEWS] Start generowania serwisu news ({teraz.strftime('%Y-%m-%d %H:%M:%S')}) -> folder '{DIR_NEWS}/'", flush=True)
-        naglowki = pobierz_swieze_naglowki_rmf(limit=5)
-        print(f"[NEWS] Wybrano najważniejszych nagłówków: {len(naglowki)}", flush=True)
-        if not naglowki:
-            logging.warning("Brak świeżych nagłówków do wygenerowania serwisu news.")
-            print("[NEWS] Brak świeżych nagłówków — przerwano przed generowaniem MP3.", flush=True)
+        print(f"[NEWS] Start generowania skrótu wiadomości ({teraz.strftime('%Y-%m-%d %H:%M:%S')}) -> '{DIR_NEWS}/'", flush=True)
+        streszczenia = pobierz_swieze_naglowki_rmf(limit=4)
+        print(f"[NEWS] Przygotowano streszczeń artykułów: {len(streszczenia)}", flush=True)
+        if not streszczenia:
+            logging.warning("Brak świeżych artykułów do wygenerowania serwisu news.")
+            print("[NEWS] Brak świeżych artykułów — przerwano przed generowaniem MP3.", flush=True)
             return None
 
         kwestie = [
-            ("glos", f"Najważniejsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}."),
+            ("glos", f"Skrót najważniejszych wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}."),
         ]
-        laczna_dlugosc = len(kwestie[0][1])
-        limit_znakow = max(550, min(900, int(czas_trwania_sek * 6.0)))
+        for idx, tresc in enumerate(streszczenia, start=1):
+            kwestie.append(("glos", f"Temat {idx}: {tresc}"))
 
-        for idx, naglowek in enumerate(naglowki, start=1):
-            tekst = f"Wiadomość {idx}: {naglowek}"
-            if laczna_dlugosc + len(tekst) > limit_znakow and idx > 1:
-                break
-            kwestie.append(("glos", tekst))
-            laczna_dlugosc += len(tekst)
+        pogoda = _pobierz_krotka_pogode()
+        if pogoda:
+            kwestie.append(("glos", pogoda))
 
-        kwestie.append(("glos", f"To były najważniejsze informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
+        kwestie.append(("glos", "To były najważniejsze informacje w Radiu Strefa Zero."))
 
         nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-        sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
-        print(f"[NEWS] Ścieżka lokalnego MP3: {sciezka_n}", flush=True)
+        sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+3%")
         if not sciezka_n or not os.path.exists(sciezka_n):
             print("[NEWS] Nie udało się utworzyć lokalnego pliku MP3.", flush=True)
             return None
+
+        try:
+            sprawdz_i_pobierz_podklady()
+            podklady = [f for f in os.listdir(DIR_STATIC_MUSIC) if f.lower().endswith((".mp3", ".wav"))]
+            if podklady:
+                bit_path = os.path.join(DIR_STATIC_MUSIC, sorted(podklady)[0])
+                glos_seg = AudioSegment.from_file(sciezka_n)
+                bit_seg = AudioSegment.from_file(bit_path)
+                cel_dl = len(glos_seg) + 1800
+                while len(bit_seg) < cel_dl:
+                    bit_seg += bit_seg
+                bit_seg = (bit_seg[:cel_dl] - 23).fade_in(400).fade_out(900)
+                final_seg = bit_seg.overlay(glos_seg, position=400)
+                final_seg.export(sciezka_n, format="mp3", bitrate="128k")
+        except Exception as e_bg:
+            print(f"[NEWS][WARN] Podkład pod newsy pominięty: {e_bg}", flush=True)
 
         transport = None
         sftp = None
@@ -969,7 +1108,7 @@ def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 150) -> str | None:
                 sftp.mkdir(DIR_NEWS)
             zdalna_sciezka = f"{DIR_NEWS}/{nazwa_pliku}"
             wyslij_i_zsynchronizuj(sftp, sciezka_n, zdalna_sciezka)
-            logging.info(f"Wysłano serwis news do '{zdalna_sciezka}'.")
+            logging.info(f"Wysłano skrót news + pogoda do '{zdalna_sciezka}'.")
             print(f"[NEWS] SUKCES — wysłano do '{zdalna_sciezka}'", flush=True)
             return zdalna_sciezka
         finally:
@@ -2713,7 +2852,6 @@ def petla_harmonogramu_w_tle():
                     wyczysc_wygasle_reklamy(sftp)
 
                     usunieto_cos = False
-                    # DIR_KAWALY celowo pominięty — pliki z kawałami zostają na później
                     foldery_do_czyszczenia = (
                         DIR_KONCERT_ZYCZEN,
                         DIR_PIOSENKA_NA_ZYCZENIE,
