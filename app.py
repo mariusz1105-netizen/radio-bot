@@ -191,6 +191,30 @@ KAWAŁY_O_JASIU = [
     ),
 ]
 
+SPOTY_REKLAMOWE_BAZA = [
+    (
+        "Szukasz stacji, która gra bez nudy od rana do nocy? Włącz Radio Strefa Zero! "
+        "Mocne bity, klubowe klimaty i dobra energia na każdy dzień. Zostań z nami!"
+    ),
+    (
+        "Masz ulubiony kawałek i chcesz pozdrowić znajomych albo rodzinę? "
+        f"Wyślij darmowego SMS-a na numer {NUMER_TEL_TEKST} i zagraj w Radiu Strefa Zero!"
+    ),
+    (
+        "Chcesz, aby Twoja firma albo wydarzenie zaistniało na antenie Radia Strefa Zero? "
+        "Nasz blok reklamowy dociera do słuchaczy, którzy kochają dobrą muzykę i świetny klimat. "
+        "Skontaktuj się z redakcją Radia Strefa Zero!"
+    ),
+    (
+        "Włączasz muzykę dla poprawy humoru? W Radiu Strefa Zero codziennie czekają świeże utwory, "
+        "kawały z przymrużeniem oka i najświeższe informacje. Słuchaj nas bez przerwy!"
+    ),
+    (
+        "Przełącz na wyższe obroty razem z Radiem Strefa Zero! "
+        f"Zamawiaj piosenki, wysyłaj życzenia i baw się razem z nami pod numerem {NUMER_TEL_TEKST}."
+    ),
+]
+
 # Katalogi utworów (3 utwory dziennie na folder)
 PULA_POBIERANIA_DZIENNEGO = {
     "muzyka klubowa": [
@@ -632,7 +656,6 @@ def _elevenlabs_zapisz(tekst: str, sciezka_mp3: str, voice_id_override: str = ""
 
 
 def _obrob_glos_radiowy(sciezka_wejsciowa: str, gruby_glos: bool = False) -> str:
-    """Czyści dudnienie poniżej 80 Hz, lekko dociąża okolice 120 Hz i kompresuje głos."""
     if not os.path.exists(sciezka_wejsciowa):
         return sciezka_wejsciowa
 
@@ -790,23 +813,160 @@ def generuj_audio_mp3(
                     pass
 
 
-def pobierz_aktualne_newsy_rmf():
+def pobierz_swieze_naglowki_rmf(limit: int = 12) -> list[str]:
+    """Pobiera aktualne nagłówki z RSS RMF24 (z pominięciem cache z poprzedniego wywołania)."""
     teraz = datetime.now(STREFA_EUROPA)
-    if teraz.weekday() in INFO_RMF_DNI and INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC:
-        try:
-            url_rss = "https://www.rmf24.pl/fakty/rss"
-            feed = feedparser.parse(url_rss)
-            newsy = []
-            if getattr(feed, "entries", None):
-                for entry in feed.entries[:2]:
-                    tytul = oczysc_wykonawce_i_tytul(entry.get("title", "").strip())
-                    if tytul:
-                        newsy.append(tytul)
-            if newsy:
-                return "Najświeższe informacje z RMF FM: " + ". ".join(newsy) + "."
-        except Exception as e:
-            logging.error(f"Błąd pobierania newsów RMF: {e}")
+    if teraz.weekday() not in INFO_RMF_DNI or not (INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC):
+        return []
+    try:
+        cache_buster = int(time.time())
+        url_rss = f"https://www.rmf24.pl/fakty/rss?v={cache_buster}"
+        feed = feedparser.parse(url_rss, agent="Mozilla/5.0 RadioStrefaZeroBot/1.0")
+        naglowki = []
+        seen = set()
+        if getattr(feed, "entries", None):
+            for entry in feed.entries:
+                tytul = oczysc_wykonawce_i_tytul((entry.get("title") or "").strip())
+                opis = oczysc_wykonawce_i_tytul((entry.get("summary") or "").strip())
+                wpis = tytul
+                if opis and opis.lower() != tytul.lower() and len(opis) < 220:
+                    wpis = f"{tytul}. {opis}"
+                klucz = re.sub(r"\W+", "", tytul.lower())
+                if tytul and klucz and klucz not in seen:
+                    seen.add(klucz)
+                    naglowki.append(wpis)
+                if len(naglowki) >= limit:
+                    break
+        return naglowki
+    except Exception as e:
+        logging.error(f"Błąd pobierania świeżych newsów RMF: {e}")
+        return []
+
+
+def pobierz_aktualne_newsy_rmf():
+    naglowki = pobierz_swieze_naglowki_rmf(limit=3)
+    if naglowki:
+        return "Najświeższe informacje z RMF FM: " + " ".join(naglowki)
     return ""
+
+
+def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 300) -> str | None:
+    """Generuje świeży serwis informacyjny (~5 min) na bazie najnowszych nagłówków RMF FM i wysyła do folderu news."""
+    teraz = datetime.now(STREFA_EUROPA)
+    naglowki = pobierz_swieze_naglowki_rmf(limit=12)
+    if not naglowki:
+        logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania 5-minutowego serwisu news.")
+        return None
+
+    kwestie = [
+        ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd świeżych informacji z RMF FM."),
+    ]
+    laczna_dlugosc = len(kwestie[0][1])
+    limit_znakow = max(2400, int(czas_trwania_sek * 13.5))
+
+    idx = 0
+    while laczna_dlugosc < limit_znakow:
+        bazowy = naglowki[idx % len(naglowki)]
+        if idx >= len(naglowki):
+            tekst = f"Przypominamy najnowszą wiadomość z tego wydania serwisu: {bazowy}"
+        else:
+            tekst = f"Kolejna świeża informacja z RMF FM: {bazowy}"
+        kwestie.append(("glos", tekst))
+        laczna_dlugosc += len(tekst)
+        idx += 1
+
+    kwestie.append(("glos", f"To były najnowsze informacje w Radiu Strefa Zero. Zapraszamy do kontaktu pod numerem: {NUMER_TEL_TEKST}."))
+
+    nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+    sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
+    if not sciezka_n or not os.path.exists(sciezka_n):
+        return None
+
+    transport = None
+    sftp = None
+    try:
+        transport, sftp = polacz_sftp()
+        zdalna_sciezka = f"{DIR_NEWS}/{nazwa_pliku}"
+        wyslij_i_zsynchronizuj(sftp, sciezka_n, zdalna_sciezka)
+        logging.info(f"Wysłano 5-minutowy serwis news do '{zdalna_sciezka}'.")
+        return zdalna_sciezka
+    except Exception as e:
+        logging.error(f"Błąd wysyłania serwisu news 5 min: {e}")
+        return None
+    finally:
+        if os.path.exists(sciezka_n):
+            try:
+                os.remove(sciezka_n)
+            except Exception:
+                pass
+        if sftp:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+        if transport:
+            try:
+                transport.close()
+            except Exception:
+                pass
+
+
+def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 180) -> str | None:
+    """Generuje blok reklamowy o długości ok. 3 minut (180 s) i wysyła do folderu 'blok reklamowy'."""
+    teraz = datetime.now(STREFA_EUROPA)
+    pula_spotow = list(SPOTY_REKLAMOWE_BAZA)
+    random.shuffle(pula_spotow)
+
+    kwestie = [
+        ("glos", "Blok reklamowy i ogłoszenia w Radiu Strefa Zero."),
+    ]
+    laczna_dlugosc = len(kwestie[0][1])
+    limit_znakow = max(1400, int(czas_trwania_sek * 13.5))
+
+    ostatni_spot = ""
+    nr = 1
+    while laczna_dlugosc < limit_znakow:
+        kandydaci = [s for s in pula_spotow if s != ostatni_spot] or pula_spotow
+        spot = random.choice(kandydaci)
+        ostatni_spot = spot
+        kwestie.append(("glos", f"Ogłoszenie numer {nr}. {spot}"))
+        laczna_dlugosc += len(spot) + 25
+        nr += 1
+
+    kwestie.append(("glos", "Koniec bloku reklamowego w Radiu Strefa Zero. Wracamy do muzyki!"))
+
+    nazwa_pliku = f"reklama_3min_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+    sciezka_r = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-MarekNeural", pitch="-1Hz", rate="+2%", gruby_glos=True)
+    if not sciezka_r or not os.path.exists(sciezka_r):
+        return None
+
+    transport = None
+    sftp = None
+    try:
+        transport, sftp = polacz_sftp()
+        zdalna_sciezka = f"{DIR_BLOK_REKLAMOWY}/{nazwa_pliku}"
+        wyslij_i_zsynchronizuj(sftp, sciezka_r, zdalna_sciezka)
+        logging.info(f"Wysłano blok reklamowy (~3 min) do '{zdalna_sciezka}'.")
+        return zdalna_sciezka
+    except Exception as e:
+        logging.error(f"Błąd wysyłania bloku reklamowego 3 min: {e}")
+        return None
+    finally:
+        if os.path.exists(sciezka_r):
+            try:
+                os.remove(sciezka_r)
+            except Exception:
+                pass
+        if sftp:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+        if transport:
+            try:
+                transport.close()
+            except Exception:
+                pass
 
 
 def okresl_folder_gatunkowy(zapytanie):
@@ -987,7 +1147,6 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
 
 
 def pobierz_3_nowe_do_folderu(folder_docelowy: str, liczba_nowych: int = 3) -> list[str]:
-    """Pobiera określoną liczbę unikalnych utworów (domyślnie 3) i wrzuca przez SFTP do folderu."""
     pula = list(PULA_POBIERANIA_DZIENNEGO.get(folder_docelowy) or [])
     if not pula:
         return []
@@ -1080,7 +1239,6 @@ def uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder: int = 3) 
 
 
 def _generuj_smiech_i_brawa() -> AudioSegment:
-    """Generuje efekt śmiechu i oklasków publiczności po kawale (lub używa pliku static/music/smiech_brawa.mp3, jeśli istnieje)."""
     wlasny_plik = os.path.join(DIR_STATIC_MUSIC, "smiech_brawa.mp3")
     if os.path.exists(wlasny_plik) and os.path.getsize(wlasny_plik) > 1024:
         try:
@@ -1113,7 +1271,6 @@ def _generuj_smiech_i_brawa() -> AudioSegment:
 
 
 def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> list[tuple[str, str]]:
-    """Buduje listę kwestii dla audycji po ok. 5 min (300 s): 'masztalski' albo 'jas'."""
     if rodzaj == "jas":
         powitanie = "Witajcie w Kąciku Jasia w Radiu Strefa Zero! Zaczynamy pięć minut z najlepszymi kawałami o Jasiu."
         pozegnanie = "I to by było na tyle w Kąciku Jasia w Radiu Strefa Zero! Słuchajcie nas dalej i śmiejcie się do rozpuku."
@@ -1126,7 +1283,7 @@ def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 30
     random.shuffle(pula)
     kwestie = [("glos", powitanie)]
     laczna_dlugosc = len(powitanie)
-    limit_znakow = max(1200, int(czas_trwania_sek * 11.5))
+    limit_znakow = max(2400, int(czas_trwania_sek * 13.5))
 
     ostatni_kawal = ""
     while laczna_dlugosc < limit_znakow:
@@ -1141,7 +1298,6 @@ def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 30
 
 
 def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> str | None:
-    """Generuje 5-minutową audycję z kawałami + śmiechem i oklaskami po każdym kawale i wysyła do folderu kawaly."""
     kwestie = zbuduj_audycje_kawaly(rodzaj=rodzaj, czas_trwania_sek=czas_trwania_sek)
     znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
     prefix = "klub_masztalskiego" if rodzaj != "jas" else "kacik_jasia"
@@ -1211,9 +1367,10 @@ def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_s
 
 
 def _godziny_kawaly_co_40_min() -> set[str]:
-    start_min = 12 * 60 + 7   # 727
-    koniec_min = 16 * 60 + 54 # 1014
-    terminy = set()
+    """Wcześniejsze wejścia z rana + cykl co 40 min w przedziale 12:07 - 16:54."""
+    terminy = {"06:05", "08:05"}
+    start_min = 12 * 60 + 7    # 727 (12:07)
+    koniec_min = 16 * 60 + 54 # 1014 (16:54)
     m = start_min
     while m <= koniec_min:
         terminy.add(f"{m // 60:02d}:{m % 60:02d}")
@@ -1540,6 +1697,22 @@ def test_generuj_godzine():
         return "Błąd generowania pliku audio", 500
     except Exception as e:
         return f"Błąd endpointu: {e}", 500
+
+
+@app.route("/test-news", methods=["GET"])
+def endpoint_test_news():
+    zdalna = wygeneruj_i_wyslij_news_5min(czas_trwania_sek=300)
+    if zdalna:
+        return jsonify({"status": "success", "remote_file": zdalna, "dlugosc_ok": "5 min"}), 200
+    return jsonify({"status": "error", "message": "Brak świeżych newsów RMF (lub poza oknem 7-23)."}), 400
+
+
+@app.route("/test-reklamy-3min", methods=["GET"])
+def endpoint_test_reklamy_3min():
+    zdalna = wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek=180)
+    if zdalna:
+        return jsonify({"status": "success", "remote_file": zdalna, "dlugosc_ok": "3 min"}), 200
+    return jsonify({"status": "error", "message": "Nie udało się wygenerować bloku reklamowego 3 min."}), 500
 
 
 @app.route("/pobierz-teraz", methods=["GET"])
@@ -2121,10 +2294,12 @@ def endpoint_generuj_jingle_ai():
 def index_glowna():
     return """
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, reklam z terminem, puli botów, mixów, audycji kawałów i dziennego pobierania działa.</p>
+    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, świeżych newsów 5 min, reklam 3 min, kawałów 5 min, mixów i dziennego pobierania działa.</p>
     <ul>
         <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser, Raport i Logi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny (5 pików)</a></li>
+        <li><a href="/test-news">Test świeżego serwisu news (~5 min)</a></li>
+        <li><a href="/test-reklamy-3min">Test bloku reklamowego (~3 min)</a></li>
         <li><a href="/pobierz-teraz">Wymuś teraz pobranie po 3 utwory do 5 folderów</a></li>
         <li><a href="/raport-tygodniowy">Podgląd raportu tygodniowego pobranych utworów</a></li>
         <li><a href="/test-kawaly?rodzaj=masztalski">Test audycji: Klub Masztalskiego (~5 min + śmiech/brawa)</a></li>
@@ -2210,6 +2385,7 @@ def petla_harmonogramu_w_tle():
                     wyczysc_wygasle_reklamy(sftp)
 
                     usunieto_cos = False
+                    # DIR_KAWALY celowo pominięty — pliki z kawałami zostają na później
                     foldery_do_czyszczenia = (
                         DIR_KONCERT_ZYCZEN,
                         DIR_PIOSENKA_NA_ZYCZENIE,
@@ -2220,7 +2396,6 @@ def petla_harmonogramu_w_tle():
                         DIR_WSTAWKI_AI,
                         DIR_CIEKAWOSTKI,
                         DIR_NOCNE_RADIO,
-                        DIR_KAWALY,
                     )
                     for folder_t in foldery_do_czyszczenia:
                         try:
@@ -2266,11 +2441,15 @@ def petla_harmonogramu_w_tle():
                 wyczysc_raport_tygodniowy_po_wyslaniu()
                 ostatni_raport_tydzien = klucz_niedzieli
 
-            # Audycje kawałów (Klub Masztalskiego / Kącik Jasia, ~5 min każda) co 40 min od 12:07 do 16:54
+            # Audycje kawałów (Klub Masztalskiego / Kącik Jasia — po ~5 min każda + śmiech/brawa)
             if hhmm in GODZINY_KAWALY_CO_40_MIN and _raz_na_minute(f"kawaly_{klucz_min}"):
                 rodzaj_audycji = "masztalski" if (licznik_audycji_kawaly % 2 == 0) else "jas"
                 licznik_audycji_kawaly += 1
                 wygeneruj_i_wyslij_audycje_kawaly(rodzaj=rodzaj_audycji, czas_trwania_sek=300)
+
+            # Blok reklamowy po ~3 minuty co pełne 2 godziny (np. o :15)
+            if teraz.minute == 15 and teraz.hour % 2 == 0 and _raz_na_minute(f"reklamy3m_{klucz_min}"):
+                wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek=180)
 
             if teraz.minute == 40:
                 docelowa_godzina = (teraz.hour + 1) % 24
@@ -2294,15 +2473,9 @@ def petla_harmonogramu_w_tle():
                             logging.info(f"Wysłano plik godziny (24/7 + 5 pików) do '{DIR_GODZINA}': {nazwa_pliku_godzina}")
 
                         if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
-                            kwestie_info = zbuduj_informacje_rmf()
-                            if kwestie_info:
-                                nazwa_pliku_info = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-                                sciezka_i = generuj_audio_mp3(kwestie_info, nazwa_pliku_info, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
-                                if sciezka_i and os.path.exists(sciezka_i):
-                                    sftp.put(sciezka_i, f"{DIR_NEWS}/{nazwa_pliku_info}")
-                                    os.remove(sciezka_i)
-                                    wyslano_cokolwiek = True
-                                    logging.info(f"Wysłano plik info do '{DIR_NEWS}': {nazwa_pliku_info}")
+                            zdalny_news = wygeneruj_i_wyslij_news_5min(czas_trwania_sek=300)
+                            if zdalny_news:
+                                wyslano_cokolwiek = True
 
                         if docelowa_godzina == 7:
                             kwestie_poranek = zbuduj_poranny_serwis()
