@@ -383,6 +383,7 @@ def _odpal_w_tle(fn, *args, **kwargs):
             fn(*args, **kwargs)
         except Exception as exc:
             logging.error(f"Błąd zadania w tle ({fn.__name__}): {exc}")
+            print(f"[TŁO][ERROR] {fn.__name__}: {exc}", flush=True)
 
     threading.Thread(target=_runner, daemon=True).start()
 
@@ -821,6 +822,7 @@ def generuj_audio_mp3(
         return sciezka_koncowa
     except Exception as e:
         logging.error(f"Błąd generatora TTS: {e}")
+        print(f"[TTS][ERROR] {e}", flush=True)
         return None
     finally:
         for temp_f in pliki_tymczasowe:
@@ -857,6 +859,7 @@ def pobierz_swieze_naglowki_rmf(limit: int = 12) -> list[str]:
         return naglowki
     except Exception as e:
         logging.error(f"Błąd pobierania świeżych newsów RMF: {e}")
+        print(f"[RMF][ERROR] {e}", flush=True)
         return []
 
 
@@ -869,59 +872,71 @@ def pobierz_aktualne_newsy_rmf():
 
 def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 150) -> str | None:
     teraz = datetime.now(STREFA_EUROPA)
-    naglowki = pobierz_swieze_naglowki_rmf(limit=6)
-    if not naglowki:
-        logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania serwisu news.")
-        return None
-
-    kwestie = [
-        ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd informacji z RMF FM."),
-    ]
-    laczna_dlugosc = len(kwestie[0][1])
-    limit_znakow = max(900, int(czas_trwania_sek * 11.0))
-
-    idx = 0
-    while laczna_dlugosc < limit_znakow and idx < len(naglowki) * 2:
-        bazowy = naglowki[idx % len(naglowki)]
-        tekst = f"Kolejna informacja z RMF FM: {bazowy}" if idx < len(naglowki) else f"Przypominamy: {bazowy}"
-        kwestie.append(("glos", tekst))
-        laczna_dlugosc += len(tekst)
-        idx += 1
-
-    kwestie.append(("glos", f"To były informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
-
-    nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
-    sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
-    if not sciezka_n or not os.path.exists(sciezka_n):
-        return None
-
-    transport = None
-    sftp = None
     try:
-        transport, sftp = polacz_sftp()
-        zdalna_sciezka = f"{DIR_NEWS}/{nazwa_pliku}"
-        wyslij_i_zsynchronizuj(sftp, sciezka_n, zdalna_sciezka)
-        logging.info(f"Wysłano serwis news do '{zdalna_sciezka}'.")
-        return zdalna_sciezka
+        print(f"[NEWS] Start generowania serwisu news ({teraz.strftime('%Y-%m-%d %H:%M:%S')}) -> folder '{DIR_NEWS}/'", flush=True)
+        naglowki = pobierz_swieze_naglowki_rmf(limit=6)
+        print(f"[NEWS] Pobrano nagłówków RMF: {len(naglowki)}", flush=True)
+        if not naglowki:
+            logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania serwisu news.")
+            print("[NEWS] Brak świeżych nagłówków RMF FM — przerwano przed generowaniem MP3.", flush=True)
+            return None
+
+        kwestie = [
+            ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd informacji z RMF FM."),
+        ]
+        laczna_dlugosc = len(kwestie[0][1])
+        limit_znakow = max(900, int(czas_trwania_sek * 11.0))
+
+        idx = 0
+        while laczna_dlugosc < limit_znakow and idx < len(naglowki) * 2:
+            bazowy = naglowki[idx % len(naglowki)]
+            tekst = f"Kolejna informacja z RMF FM: {bazowy}" if idx < len(naglowki) else f"Przypominamy: {bazowy}"
+            kwestie.append(("glos", tekst))
+            laczna_dlugosc += len(tekst)
+            idx += 1
+
+        kwestie.append(("glos", f"To były informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
+
+        nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
+        sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
+        print(f"[NEWS] Ścieżka lokalnego MP3: {sciezka_n}", flush=True)
+        if not sciezka_n or not os.path.exists(sciezka_n):
+            print("[NEWS] Nie udało się utworzyć lokalnego pliku MP3.", flush=True)
+            return None
+
+        transport = None
+        sftp = None
+        try:
+            transport, sftp = polacz_sftp()
+            try:
+                sftp.stat(DIR_NEWS)
+            except IOError:
+                sftp.mkdir(DIR_NEWS)
+            zdalna_sciezka = f"{DIR_NEWS}/{nazwa_pliku}"
+            wyslij_i_zsynchronizuj(sftp, sciezka_n, zdalna_sciezka)
+            logging.info(f"Wysłano serwis news do '{zdalna_sciezka}'.")
+            print(f"[NEWS] SUKCES — wysłano do '{zdalna_sciezka}'", flush=True)
+            return zdalna_sciezka
+        finally:
+            if os.path.exists(sciezka_n):
+                try:
+                    os.remove(sciezka_n)
+                except Exception:
+                    pass
+            if sftp:
+                try:
+                    sftp.close()
+                except Exception:
+                    pass
+            if transport:
+                try:
+                    transport.close()
+                except Exception:
+                    pass
     except Exception as e:
         logging.error(f"Błąd wysyłania serwisu news: {e}")
+        print(f"[NEWS][ERROR] {type(e).__name__}: {e}", flush=True)
         return None
-    finally:
-        if os.path.exists(sciezka_n):
-            try:
-                os.remove(sciezka_n)
-            except Exception:
-                pass
-        if sftp:
-            try:
-                sftp.close()
-            except Exception:
-                pass
-        if transport:
-            try:
-                transport.close()
-            except Exception:
-                pass
 
 
 def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 120) -> str | None:
@@ -1963,8 +1978,13 @@ def test_generuj_godzine():
 
 @app.route("/test-news", methods=["GET"])
 def endpoint_test_news():
+    print("[TEST-NEWS] Wywołano /test-news — uruchamiam wątek w tle...", flush=True)
     _odpal_w_tle(wygeneruj_i_wyslij_news_5min, 150)
-    return jsonify({"status": "queued", "message": "Generowanie serwisu news ruszyło w tle. Sprawdź Logs lub SFTP za chwilę."}), 202
+    return jsonify({
+        "status": "queued",
+        "target_folder": f"{DIR_NEWS}/",
+        "message": "Generowanie serwisu news ruszyło w tle (folder docelowy: news/). Sprawdź Logs lub SFTP za chwilę.",
+    }), 202
 
 
 @app.route("/test-reklamy-3min", methods=["GET"])
@@ -2026,7 +2046,7 @@ def endpoint_generuj_mix():
 
     _odpal_w_tle(
         wygeneruj_mix_z_folderu,
-        folder_gatunkowy=folder_gatunkowy,
+        folder_gatunkowy=folder_gatunek,
         liczba_utworow=liczba,
         crossfade_ms=crossfade_ms,
         folder_docelowy=folder_docelowy,
