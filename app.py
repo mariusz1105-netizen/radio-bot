@@ -34,6 +34,9 @@ DIR_STATIC_MUSIC = "static/music"
 DIR_STATIC_OUTPUT = "static/output"
 PLIK_TERMINY_REKLAM = os.path.join(FOLDER_ROBOCZY, "reklamy_terminy.json")
 PLIK_HISTORIA_TEKSTOW = os.path.join(FOLDER_ROBOCZY, "historia_teksty.json")
+PLIK_HISTORIA_POBRANYCH = os.path.join(FOLDER_ROBOCZY, "historia_pobranych.json")
+PLIK_RAPORT_TYGODNIOWY = os.path.join(FOLDER_ROBOCZY, "raport_tygodniowy.json")
+PLIK_RAPORT_TYGODNIOWY_TXT = os.path.join(FOLDER_ROBOCZY, "raport_tygodniowy.txt")
 
 os.makedirs(FOLDER_ROBOCZY, exist_ok=True)
 os.makedirs(DIR_STATIC_MUSIC, exist_ok=True)
@@ -68,6 +71,7 @@ DIR_WSTAWKI_AI = "wstawki_ai"
 DIR_AUDYCJE_SPECJALNE = "audycje_specjalne"
 DIR_CIEKAWOSTKI = "ciekawostki"
 DIR_NOCNE_RADIO = "nocne_radio"
+DIR_RADIO = "radio"
 
 FOLDERY_GATUNKOWE = [
     "disco polo",
@@ -92,6 +96,7 @@ WSZYSTKIE_FOLDERY_SFTP = (
     DIR_AUDYCJE_SPECJALNE,
     DIR_CIEKAWOSTKI,
     DIR_NOCNE_RADIO,
+    DIR_RADIO,
 ) + tuple(FOLDERY_GATUNKOWE)
 
 STREFA_EUROPA = ZoneInfo(os.environ.get("TIMEZONE", "Europe/Warsaw"))
@@ -128,6 +133,92 @@ NOCNE_WEJSCIA_KLUBOWE = [
     "Środek nocy w Radiu Strefa Zero. Podkręcamy nocną selekcję i lecimy dalej z dobrym brzmieniem.",
     "Nocna zmiana w Radiu Strefa Zero! Klubowe uderzenie, zero pośpiechu i pełen ogień na głośnikach.",
 ]
+
+# Katalogi utworów (3 utwory dziennie na folder)
+PULA_POBIERANIA_DZIENNEGO = {
+    "muzyka klubowa": [
+        "HUGEL Imael Angel Ultra Nate Movin To The Sun",
+        "ANOTR 54 Ultra Talk To You",
+        "Ian Asher Olly Alexander Desire",
+        "Prospa Cloonee Free Your Mind",
+        "Martin Garrix This Dream Of You",
+        "Swedish House Mafia Lykke Li Happiness Is So Sad",
+        "Kygo Ava Max Before You Know It",
+        "Mau P Just A Little Bit More",
+        "Dom Dolla Solomun Skepta Danger Danger",
+        "HUGEL David Guetta Shine",
+        "Bebe Rexha Faithless New Religion",
+        "Oskar Med K Haley Joelle I Think Im Addicted",
+        "Jennifer Lopez David Guetta Save Me Tonight",
+        "Martin Garrix Ed Sheeran Repeat It",
+        "Peggy Gou Back Again",
+        "CamelPhat Elderbrook Sun Comes Up",
+    ],
+    "disco polo": [
+        "Zenek Martyniuk Akcent Przekorny los",
+        "Boys Marcin Miller Szalona",
+        "Classic Jolka Jolka",
+        "Milano Bara bara",
+        "Defis Niespotykany kolor",
+        "Piekni i Mlodzi Niewiara",
+        "Skolim Wyscigowka",
+        "Bayer Full Blondyneczka",
+        "Topky Szklanka",
+        "Mig Wymarzona",
+        "Cliver Chodz ze mna",
+        "Long and Junior Tanczyc chce",
+        "Czadoman Ruda tanczy jak szalona",
+        "Slawek Uniatowski disco polo mix",
+    ],
+    "radio": [
+        "Dua Lipa Illusion",
+        "Sabrina Carpenter Espresso",
+        "Ava Max My Oh My",
+        "Kylie Minogue Padam Padam",
+        "David Guetta OneRepublic I Dont Wanna Wait",
+        "Alok Bebe Rexha Deep In Your Love",
+        "Tiesto Karol G Contigo",
+        "Purple Disco Machine Sophie and the Giants In The Dark",
+        "Meduza James Carter Bad Memories",
+        "Calvin Harris Ellie Goulding Miracle",
+        "Roksana Wegiel Napisze do ciebie",
+        "Doda Melodia tanczy",
+        "Tribbs Ballady",
+        "Zalewski Zabawa",
+    ],
+    "italo disco": [
+        "Fancy Flames of Love",
+        "Savage Goodbye",
+        "Scotch Disco Band",
+        "Bad Boys Blue Youre a Woman",
+        "C.C. Catch Cause You Are Young",
+        "Ken Laszlo Tonight",
+        "Silver Pozzoli Around My Dream",
+        "Righetti Spanioli Marina",
+        "Gazebo I Like Chopin",
+        "Den Harrow Mad Desire",
+        "Baltimora Tarzan Boy",
+        "Modern Talking Cheri Cheri Lady",
+        "Lian Ross Say Youll Never",
+        "Mike Mareen Love Spy",
+    ],
+    "disco polo dance": [
+        "Playboys Ile lat",
+        "After Party Bujaj sie",
+        "D-Bomb O ela ela",
+        "Vivat Moja malutka",
+        "Etna Rolnik",
+        "Marek Gwiazdowski Bzyk Bzyk",
+        "Camasutra Sam na sam",
+        "Mejk Zawsze i wszedzie",
+        "Extazy Balujemy dzisiaj",
+        "MilyPan Królowa",
+        "Gesek Niby nic",
+        "Wez Nie Pytaj Czekolada",
+        "Kordian Dziewczyna z gor",
+        "Baciary Oczy zielone",
+    ],
+}
 
 DOZWOLONE_SKROTY = {"DJ", "FM", "MP3", "SMS", "TV", "VIP", "AI", "URL", "API", "SFTP", "BPM", "RSS", "TTS", "HQ", "HD"}
 
@@ -194,6 +285,7 @@ ROZBIJANIE_SKLEJONYCH = {
 
 terminy_lock = threading.Lock()
 historia_lock = threading.Lock()
+pobrane_lock = threading.Lock()
 
 
 def _format_pitch(pitch) -> str:
@@ -681,7 +773,7 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
 
     foldery_do_sprawdzenia = (
         tuple(FOLDERY_GATUNKOWE)
-        + (DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_JINGLES, ".")
+        + (DIR_RADIO, DIR_POBRANE, DIR_PIOSENKI_DLA_SLUCHACZY, DIR_KONCERT_ZYCZEN, DIR_PIOSENKA_NA_ZYCZENIE, DIR_JINGLES, ".")
     )
     for folder in foldery_do_sprawdzenia:
         try:
@@ -696,13 +788,116 @@ def szukaj_piosenki_na_dysku_sftp(sftp, zapytanie):
     return None
 
 
+def _normalizuj_klucz_utworu(nazwa: str) -> str:
+    czyste = oczysc_wykonawce_i_tytul(nazwa).lower()
+    czyste = re.sub(r"\b(top_klub|auto_pobrane|202\d{5}|_\d{6})\b", " ", czyste)
+    tokeny = [t for t in re.findall(r"[a-ząćęłńóśźż0-9]+", czyste) if len(t) > 1]
+    return " ".join(sorted(set(tokeny)))
+
+
+def _wczytaj_historie_pobranych() -> dict:
+    with pobrane_lock:
+        if not os.path.exists(PLIK_HISTORIA_POBRANYCH):
+            return {}
+        try:
+            with open(PLIK_HISTORIA_POBRANYCH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+
+def _zapisz_historie_pobranych(dane: dict) -> None:
+    with pobrane_lock:
+        try:
+            with open(PLIK_HISTORIA_POBRANYCH, "w", encoding="utf-8") as f:
+                json.dump(dane, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f"Błąd zapisu historii pobranych: {e}")
+
+
+def _dopisz_do_raportu_tygodniowego(folder: str, tytul: str) -> None:
+    teraz = datetime.now(STREFA_EUROPA)
+    with pobrane_lock:
+        dane = {"wpisy": []}
+        if os.path.exists(PLIK_RAPORT_TYGODNIOWY):
+            try:
+                with open(PLIK_RAPORT_TYGODNIOWY, "r", encoding="utf-8") as f:
+                    dane = json.load(f) or {"wpisy": []}
+            except Exception:
+                dane = {"wpisy": []}
+
+        dane.setdefault("wpisy", []).append({
+            "data": teraz.strftime("%Y-%m-%d %H:%M"),
+            "folder": folder,
+            "tytul": tytul,
+        })
+        try:
+            with open(PLIK_RAPORT_TYGODNIOWY, "w", encoding="utf-8") as f:
+                json.dump(dane, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f"Błąd zapisu raportu tygodniowego JSON: {e}")
+
+
+def generuj_i_zapisz_raport_tygodniowy() -> str:
+    teraz = datetime.now(STREFA_EUROPA)
+    with pobrane_lock:
+        dane = {"wpisy": []}
+        if os.path.exists(PLIK_RAPORT_TYGODNIOWY):
+            try:
+                with open(PLIK_RAPORT_TYGODNIOWY, "r", encoding="utf-8") as f:
+                    dane = json.load(f) or {"wpisy": []}
+            except Exception:
+                dane = {"wpisy": []}
+
+        wpisy = dane.get("wpisy") or []
+        po_folderach = {}
+        for item in wpisy:
+            fld = item.get("folder", "inne")
+            po_folderach.setdefault(fld, []).append(item)
+
+        linie = [
+            f"=== TYGODNIOWY RAPORT POBRANYCH UTWORÓW ({teraz.strftime('%Y-%m-%d %H:%M')}) ===",
+            f"Łącznie pobrano w tym cyklu: {len(wpisy)} utworów.",
+            "",
+        ]
+        for fld in ("muzyka klubowa", "disco polo", "radio", "italo disco", "disco polo dance"):
+            lista_fld = po_folderach.get(fld, [])
+            linie.append(f"[{fld}] ({len(lista_fld)}):")
+            if not lista_fld:
+                linie.append("  - brak nowych utworów w tym okresie")
+            else:
+                for idx, w in enumerate(lista_fld, start=1):
+                    linie.append(f"  {idx}. {w.get('tytul')} ({w.get('data')})")
+            linie.append("")
+
+        tresc_raportu = "\n".join(linie).strip()
+        try:
+            with open(PLIK_RAPORT_TYGODNIOWY_TXT, "w", encoding="utf-8") as f:
+                f.write(tresc_raportu + "\n")
+        except Exception as e:
+            logging.error(f"Błąd zapisu raportu tygodniowego TXT: {e}")
+
+        logging.info("\n" + tresc_raportu)
+        return tresc_raportu
+
+
+def wyczysc_raport_tygodniowy_po_wyslaniu() -> None:
+    with pobrane_lock:
+        try:
+            with open(PLIK_RAPORT_TYGODNIOWY, "w", encoding="utf-8") as f:
+                json.dump({"wpisy": []}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+
 def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     czyste_zapytanie = oczysc_wykonawce_i_tytul(zapytanie) or zapytanie
     baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     warianty_zapytan = [
         f"ytsearch1:{czyste_zapytanie} audio",
+        f"ytsearch1:{czyste_zapytanie} official audio",
         f"ytsearch1:{czyste_zapytanie} hq",
-        f"ytsearch1:{czyste_zapytanie} piosenka",
+        f"scsearch1:{czyste_zapytanie}",
         f"ytsearch1:{czyste_zapytanie}",
     ]
 
@@ -711,7 +906,9 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
         "outtmpl": f"{baza_nazwy}.%(ext)s",
         "noplaylist": True,
         "quiet": True,
+        "no_warnings": True,
         "socket_timeout": 25,
+        "retries": 2,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -730,6 +927,99 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             logging.error(f"Błąd pobierania yt-dlp dla '{query}': {e}")
             continue
     return None
+
+
+def pobierz_3_nowe_do_folderu(folder_docelowy: str, liczba_nowych: int = 3) -> list[str]:
+    """Pobiera określoną liczbę unikalnych utworów (domyślnie 3) i wrzuca przez SFTP do folderu."""
+    pula = list(PULA_POBIERANIA_DZIENNEGO.get(folder_docelowy) or [])
+    if not pula:
+        return []
+
+    historia = _wczytaj_historie_pobranych()
+    pobrane_klucze = set(historia.get(folder_docelowy) or [])
+
+    transport = None
+    sftp = None
+    dodane_tytuly = []
+
+    try:
+        transport, sftp = polacz_sftp()
+        try:
+            pliki_w_folderze = [f for f in sftp.listdir(folder_docelowy) if f.lower().endswith(".mp3")]
+        except Exception:
+            pliki_w_folderze = []
+
+        klucze_w_folderze = {_normalizuj_klucz_utworu(p) for p in pliki_w_folderze if _normalizuj_klucz_utworu(p)}
+        wszystkie_zajete_klucze = pobrane_klucze | klucze_w_folderze
+
+        random.shuffle(pula)
+        znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
+
+        for idx, fraza in enumerate(pula):
+            if len(dodane_tytuly) >= liczba_nowych:
+                break
+
+            w_orig, t_orig = pobierz_oryginalny_tytul_z_sieci(fraza)
+            etykieta = f"{w_orig} — {t_orig}" if (w_orig and t_orig) else (t_orig or w_orig or fraza)
+            klucz_kandydata = _normalizuj_klucz_utworu(etykieta)
+            klucz_frazy = _normalizuj_klucz_utworu(fraza)
+
+            if (klucz_kandydata and klucz_kandydata in wszystkie_zajete_klucze) or (
+                klucz_frazy and klucz_frazy in wszystkie_zajete_klucze
+            ):
+                continue
+
+            slug = re.sub(r"[^A-Za-z0-9]+", "_", etykieta).strip("_")[:42] or f"utwor_{idx}"
+            nazwa_bez_rozsz = f"{slug}_{znacznik}_{idx}"
+            lokalny_mp3 = pobierz_piosenke_z_sieci(etykieta or fraza, nazwa_bez_rozsz)
+
+            if lokalny_mp3 and os.path.exists(lokalny_mp3):
+                zdalna_sciezka = f"{folder_docelowy}/{nazwa_bez_rozsz}.mp3"
+                sftp.put(lokalny_mp3, zdalna_sciezka)
+                os.remove(lokalny_mp3)
+
+                dodane_tytuly.append(etykieta)
+                if klucz_kandydata:
+                    wszystkie_zajete_klucze.add(klucz_kandydata)
+                    pobrane_klucze.add(klucz_kandydata)
+                if klucz_frazy:
+                    wszystkie_zajete_klucze.add(klucz_frazy)
+                    pobrane_klucze.add(klucz_frazy)
+
+                _dopisz_do_raportu_tygodniowego(folder_docelowy, etykieta)
+                logging.info(f"[AUTO-POBIERANIE] '{etykieta}' -> '{zdalna_sciezka}'")
+
+        historia[folder_docelowy] = list(pobrane_klucze)[-500:]
+        _zapisz_historie_pobranych(historia)
+
+        if dodane_tytuly:
+            zsynchronizuj_azuracast()
+
+        return dodane_tytuly
+    except Exception as e:
+        logging.error(f"Błąd pobierania utworów do '{folder_docelowy}': {e}")
+        return dodane_tytuly
+    finally:
+        if sftp:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+        if transport:
+            try:
+                transport.close()
+            except Exception:
+                pass
+
+
+def uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder: int = 3) -> dict:
+    foldery_docelowe = ["muzyka klubowa", "disco polo", "radio", "italo disco", "disco polo dance"]
+    podsumowanie = {}
+    for folder in foldery_docelowe:
+        pobrane = pobierz_3_nowe_do_folderu(folder, liczba_nowych=liczba_na_folder)
+        podsumowanie[folder] = pobrane
+        logging.info(f"[DZIENNE POBIERANIE] Folder '{folder}': pobrano {len(pobrane)}/{liczba_na_folder} -> {pobrane}")
+    return podsumowanie
 
 
 def zbuduj_tylko_godzine(docelowa_godzina_24h):
@@ -950,11 +1240,11 @@ def przetworz_sms_w_tle(tresc_sms, numer_nadawcy):
             if not sciezka_istniejaca:
                 bezpieczna_nazwa = re.sub(r"[^a-zA-Z0-9_-]", "", etykieta_muzyczna or zapytanie_muzyczne)[:40] + f"_{znacznik_czasu}"
                 lokalne_mp3 = pobierz_piosenke_z_sieci(etykieta_muzyczna or zapytanie_muzyczne, bezpieczna_nazwa)
-                if lokalne_mp3 and os.path.exists(lokalne_mp3):
+                if lokalne_mp3 and os.path.exists(lokalny_mp3):
                     folder_gatunek = okresl_folder_gatunkowy(etykieta_muzyczna or zapytanie_muzyczne)
                     zdalna_piosenka = f"{folder_gatunek}/{bezpieczna_nazwa}.mp3"
-                    sftp.put(lokalne_mp3, zdalna_piosenka)
-                    os.remove(lokalne_mp3)
+                    sftp.put(lokalny_mp3, zdalna_piosenka)
+                    os.remove(lokalny_mp3)
                     pobrano_nowy_utwor = True
                     logging.info(f"Pobrano i wysłano utwór '{etykieta_muzyczna}' do '{zdalna_piosenka}'.")
 
@@ -1050,6 +1340,18 @@ def test_generuj_godzine():
         return f"Błąd endpointu: {e}", 500
 
 
+@app.route("/pobierz-teraz", methods=["GET"])
+def endpoint_pobierz_teraz():
+    wynik = uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder=3)
+    return jsonify({"status": "success", "pobrane": wynik}), 200
+
+
+@app.route("/raport-tygodniowy", methods=["GET"])
+def endpoint_raport_tygodniowy():
+    tekst = generuj_i_zapisz_raport_tygodniowy()
+    return f"<pre>{tekst}</pre>", 200
+
+
 @app.route("/generuj-mix", methods=["GET", "POST"])
 def endpoint_generuj_mix():
     folder_gatunek = request.values.get("folder", "muzyka klubowa")
@@ -1090,7 +1392,7 @@ def endpoint_generuj_mix():
     )
     if zdalna:
         return jsonify({"status": "success", "remote_file": zdalna, "folder": folder_gatunek}), 200
-    return jsonify({"status": "error", "message": f"Nie udało się wygenerować mixu z '{folder_gatunek}'."}), 400
+    return jsonify({"status": "error", "message": f"Nie udało się wygenerować mixu z '{folder_gatunkowy}'."}), 400
 
 
 @app.route("/usun-reklame", methods=["POST"])
@@ -1308,6 +1610,11 @@ SZABLON_JINGLES = """
         </div>
 
         <div class="box-section">
+            <h3>📊 Raport tygodniowy pobranych utworów (niedziela)</h3>
+            <pre class="log-box">{{ weekly_report }}</pre>
+        </div>
+
+        <div class="box-section">
             <h3>📜 Ostatnie wpisy z dziennika (radio_bot.log)</h3>
             <pre class="log-box">{{ recent_logs }}</pre>
         </div>
@@ -1480,6 +1787,7 @@ def panel_jingles():
         all_folders=WSZYSTKIE_FOLDERY_SFTP,
         bot_pool=PULA_BOTOW,
         active_ads=sformatowane_reklamy,
+        weekly_report=generuj_i_zapisz_raport_tygodniowy(),
         recent_logs=pobierz_ostatnie_logi(25),
         elevenlabs_configured=bool(ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID),
     )
@@ -1600,10 +1908,12 @@ def endpoint_generuj_jingle_ai():
 def index_glowna():
     return """
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, reklam z terminem, puli botów i mixów działa.</p>
+    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, reklam z terminem, puli botów, mixów i dziennego pobierania działa.</p>
     <ul>
-        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser i Logi</b></a></li>
+        <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser, Raport i Logi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny (5 pików)</a></li>
+        <li><a href="/pobierz-teraz">Wymuś teraz pobranie po 3 utwory do 5 folderów</a></li>
+        <li><a href="/raport-tygodniowy">Podgląd raportu tygodniowego pobranych utworów</a></li>
         <li><a href="/generuj-mix?folder=muzyka%20klubowa&count=3">Test generowania mixu (muzyka klubowa)</a></li>
     </ul>
     """
@@ -1663,6 +1973,8 @@ def petla_harmonogramu_w_tle():
     ostatnia_zapowiedziana_godzina = -1
     ostatni_mix_godzina = -1
     ostatnie_czyszczenie_ts = 0
+    ostatni_dzien_pobierania = ""
+    ostatni_raport_tydzien = ""
 
     while True:
         try:
@@ -1670,6 +1982,7 @@ def petla_harmonogramu_w_tle():
             obecny_ts = time.time()
             hhmm = teraz.strftime("%H:%M")
             klucz_min = teraz.strftime("%Y-%m-%d %H:%M")
+            dzis_str = teraz.strftime("%Y-%m-%d")
             czy_noc = teraz.hour >= 22 or teraz.hour < 6
             czy_weekend = teraz.weekday() in (4, 5, 6)
 
@@ -1699,10 +2012,10 @@ def petla_harmonogramu_w_tle():
                                     sciezka_pliku = f"{folder_t}/{plik}"
                                     try:
                                         attr = sftp.stat(sciezka_pliku)
-                                        if obecny_ts - attr.st_mtime > 7200:
+                                        if obecny_ts - attr.st_mtime > 2400:
                                             sftp.remove(sciezka_pliku)
                                             usunieto_cos = True
-                                            logging.info(f"Usunięto przestarzały plik z serwera: {sciezka_pliku}")
+                                            logging.info(f"Usunięto plik po 40 min od wygenerowania: {sciezka_pliku}")
                                     except Exception:
                                         pass
                         except Exception:
@@ -1723,6 +2036,18 @@ def petla_harmonogramu_w_tle():
                         except Exception:
                             pass
                 ostatnie_czyszczenie_ts = obecny_ts
+
+            # Raz dziennie o 06:00 pobierz po 3 nowe, niepowtarzające się utwory do 5 folderów
+            if teraz.hour == 6 and teraz.minute == 0 and ostatni_dzien_pobierania != dzis_str:
+                uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder=3)
+                ostatni_dzien_pobierania = dzis_str
+
+            # Co tydzień w niedzielę (weekday == 6) o 10:00 wygeneruj raport pobranych utworów
+            klucz_niedzieli = teraz.strftime("%Y-W%U")
+            if teraz.weekday() == 6 and teraz.hour == 10 and teraz.minute == 0 and ostatni_raport_tydzien != klucz_niedzieli:
+                generuj_i_zapisz_raport_tygodniowy()
+                wyczysc_raport_tygodniowy_po_wyslaniu()
+                ostatni_raport_tydzien = klucz_niedzieli
 
             if teraz.minute == 40:
                 docelowa_godzina = (teraz.hour + 1) % 24
