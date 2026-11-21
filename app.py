@@ -223,7 +223,6 @@ SPOTY_REKLAMOWE_BAZA = [
     ),
 ]
 
-# Katalogi utworów (3 utwory dziennie na folder)
 PULA_POBIERANIA_DZIENNEGO = {
     "muzyka klubowa": [
         "HUGEL Imael Angel Ultra Nate Movin To The Sun",
@@ -376,6 +375,16 @@ terminy_lock = threading.Lock()
 historia_lock = threading.Lock()
 kawaly_lock = threading.Lock()
 pobrane_lock = threading.Lock()
+
+
+def _odpal_w_tle(fn, *args, **kwargs):
+    def _runner():
+        try:
+            fn(*args, **kwargs)
+        except Exception as exc:
+            logging.error(f"Błąd zadania w tle ({fn.__name__}): {exc}")
+
+    threading.Thread(target=_runner, daemon=True).start()
 
 
 def _format_pitch(pitch) -> str:
@@ -823,7 +832,6 @@ def generuj_audio_mp3(
 
 
 def pobierz_swieze_naglowki_rmf(limit: int = 12) -> list[str]:
-    """Pobiera aktualne nagłówki z RSS RMF24 (z pominięciem cache z poprzedniego wywołania)."""
     teraz = datetime.now(STREFA_EUROPA)
     if teraz.weekday() not in INFO_RMF_DNI or not (INFO_RMF_START <= teraz.hour < INFO_RMF_KONIEC):
         return []
@@ -859,32 +867,28 @@ def pobierz_aktualne_newsy_rmf():
     return ""
 
 
-def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 300) -> str | None:
-    """Generuje świeży serwis informacyjny (~5 min) na bazie najnowszych nagłówków RMF FM i wysyła do folderu news."""
+def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 150) -> str | None:
     teraz = datetime.now(STREFA_EUROPA)
-    naglowki = pobierz_swieze_naglowki_rmf(limit=12)
+    naglowki = pobierz_swieze_naglowki_rmf(limit=6)
     if not naglowki:
-        logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania 5-minutowego serwisu news.")
+        logging.warning("Brak świeżych nagłówków RMF FM do wygenerowania serwisu news.")
         return None
 
     kwestie = [
-        ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd świeżych informacji z RMF FM."),
+        ("glos", f"Najnowsze wiadomości w Radiu Strefa Zero, godzina {teraz.strftime('%H:%M')}. Przegląd informacji z RMF FM."),
     ]
     laczna_dlugosc = len(kwestie[0][1])
-    limit_znakow = max(2400, int(czas_trwania_sek * 13.5))
+    limit_znakow = max(900, int(czas_trwania_sek * 11.0))
 
     idx = 0
-    while laczna_dlugosc < limit_znakow:
+    while laczna_dlugosc < limit_znakow and idx < len(naglowki) * 2:
         bazowy = naglowki[idx % len(naglowki)]
-        if idx >= len(naglowki):
-            tekst = f"Przypominamy najnowszą wiadomość z tego wydania serwisu: {bazowy}"
-        else:
-            tekst = f"Kolejna świeża informacja z RMF FM: {bazowy}"
+        tekst = f"Kolejna informacja z RMF FM: {bazowy}" if idx < len(naglowki) else f"Przypominamy: {bazowy}"
         kwestie.append(("glos", tekst))
         laczna_dlugosc += len(tekst)
         idx += 1
 
-    kwestie.append(("glos", f"To były najnowsze informacje w Radiu Strefa Zero. Zapraszamy do kontaktu pod numerem: {NUMER_TEL_TEKST}."))
+    kwestie.append(("glos", f"To były informacje w Radiu Strefa Zero. Numer SMS: {NUMER_TEL_TEKST}."))
 
     nazwa_pliku = f"news_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
     sciezka_n = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-ZofiaNeural", pitch="+0Hz", rate="+4%")
@@ -897,10 +901,10 @@ def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 300) -> str | None:
         transport, sftp = polacz_sftp()
         zdalna_sciezka = f"{DIR_NEWS}/{nazwa_pliku}"
         wyslij_i_zsynchronizuj(sftp, sciezka_n, zdalna_sciezka)
-        logging.info(f"Wysłano 5-minutowy serwis news do '{zdalna_sciezka}'.")
+        logging.info(f"Wysłano serwis news do '{zdalna_sciezka}'.")
         return zdalna_sciezka
     except Exception as e:
-        logging.error(f"Błąd wysyłania serwisu news 5 min: {e}")
+        logging.error(f"Błąd wysyłania serwisu news: {e}")
         return None
     finally:
         if os.path.exists(sciezka_n):
@@ -920,8 +924,7 @@ def wygeneruj_i_wyslij_news_5min(czas_trwania_sek: int = 300) -> str | None:
                 pass
 
 
-def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 180) -> str | None:
-    """Generuje blok reklamowy o długości ok. 3 minut (180 s) i wysyła do folderu 'blok reklamowy'."""
+def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 120) -> str | None:
     teraz = datetime.now(STREFA_EUROPA)
     pula_spotow = list(SPOTY_REKLAMOWE_BAZA)
     random.shuffle(pula_spotow)
@@ -930,19 +933,19 @@ def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 180) -> str |
         ("glos", "Blok reklamowy i ogłoszenia w Radiu Strefa Zero."),
     ]
     laczna_dlugosc = len(kwestie[0][1])
-    limit_znakow = max(1400, int(czas_trwania_sek * 13.5))
+    limit_znakow = max(750, int(czas_trwania_sek * 11.0))
 
     ostatni_spot = ""
     nr = 1
-    while laczna_dlugosc < limit_znakow:
+    while laczna_dlugosc < limit_znakow and nr <= 6:
         kandydaci = [s for s in pula_spotow if s != ostatni_spot] or pula_spotow
         spot = random.choice(kandydaci)
         ostatni_spot = spot
-        kwestie.append(("glos", f"Ogłoszenie numer {nr}. {spot}"))
-        laczna_dlugosc += len(spot) + 25
+        kwestie.append(("glos", f"Ogłoszenie {nr}. {spot}"))
+        laczna_dlugosc += len(spot) + 20
         nr += 1
 
-    kwestie.append(("glos", "Koniec bloku reklamowego w Radiu Strefa Zero. Wracamy do muzyki!"))
+    kwestie.append(("glos", "Koniec bloku reklamowego w Radiu Strefa Zero."))
 
     nazwa_pliku = f"reklama_3min_{teraz.strftime('%Y%m%d_%H%M%S')}.mp3"
     sciezka_r = generuj_audio_mp3(kwestie, nazwa_pliku, glos="pl-PL-MarekNeural", pitch="-1Hz", rate="+2%", gruby_glos=True)
@@ -955,10 +958,10 @@ def wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek: int = 180) -> str |
         transport, sftp = polacz_sftp()
         zdalna_sciezka = f"{DIR_BLOK_REKLAMOWY}/{nazwa_pliku}"
         wyslij_i_zsynchronizuj(sftp, sciezka_r, zdalna_sciezka)
-        logging.info(f"Wysłano blok reklamowy (~3 min) do '{zdalna_sciezka}'.")
+        logging.info(f"Wysłano blok reklamowy do '{zdalna_sciezka}'.")
         return zdalna_sciezka
     except Exception as e:
-        logging.error(f"Błąd wysyłania bloku reklamowego 3 min: {e}")
+        logging.error(f"Błąd wysyłania bloku reklamowego: {e}")
         return None
     finally:
         if os.path.exists(sciezka_r):
@@ -1121,8 +1124,6 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
     baza_nazwy = os.path.join(FOLDER_ROBOCZY, nazwa_docelowa_bez_rozsz)
     warianty_zapytan = [
         f"ytsearch1:{czyste_zapytanie} audio",
-        f"ytsearch1:{czyste_zapytanie} official audio",
-        f"ytsearch1:{czyste_zapytanie} hq",
         f"scsearch1:{czyste_zapytanie}",
         f"ytsearch1:{czyste_zapytanie}",
     ]
@@ -1133,12 +1134,12 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "socket_timeout": 25,
-        "retries": 2,
+        "socket_timeout": 12,
+        "retries": 1,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferredquality": "128",
         }],
     }
 
@@ -1150,12 +1151,12 @@ def pobierz_piosenke_z_sieci(zapytanie, nazwa_docelowa_bez_rozsz):
             if os.path.exists(gotowy_plik) and os.path.getsize(gotowy_plik) > 10000:
                 return gotowy_plik
         except Exception as e:
-            logging.error(f"Błąd pobierania yt-dlp dla '{query}': {e}")
+            logging.warning(f"Pominięto źródło yt-dlp dla '{query}': {e}")
             continue
     return None
 
 
-def pobierz_3_nowe_do_folderu(folder_docelowy: str, liczba_nowych: int = 3) -> list[str]:
+def pobierz_3_nowe_do_folderu(folder_docelowy: str, liczba_nowych: int = 2) -> list[str]:
     pula = list(PULA_POBIERANIA_DZIENNEGO.get(folder_docelowy) or [])
     if not pula:
         return []
@@ -1237,7 +1238,7 @@ def pobierz_3_nowe_do_folderu(folder_docelowy: str, liczba_nowych: int = 3) -> l
                 pass
 
 
-def uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder: int = 3) -> dict:
+def uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder: int = 2) -> dict:
     foldery_docelowe = ["muzyka klubowa", "disco polo", "radio", "italo disco", "disco polo dance"]
     podsumowanie = {}
     for folder in foldery_docelowe:
@@ -1251,32 +1252,32 @@ def _generuj_smiech_i_brawa() -> AudioSegment:
     wlasny_plik = os.path.join(DIR_STATIC_MUSIC, "smiech_brawa.mp3")
     if os.path.exists(wlasny_plik) and os.path.getsize(wlasny_plik) > 1024:
         try:
-            return effects.normalize(AudioSegment.from_file(wlasny_plik)[:3600]).fade_in(120).fade_out(300)
+            return effects.normalize(AudioSegment.from_file(wlasny_plik)[:2400]).fade_in(100).fade_out(250)
         except Exception:
             pass
 
     rng = random.Random(int(time.time() * 1000) % 100000)
     brawa = AudioSegment.silent(duration=0)
-    for step in range(28):
-        dl = rng.randint(35, 75)
+    for step in range(18):
+        dl = rng.randint(35, 65)
         szum = AudioSegment.from_mono_audiosegments(
             Sine(rng.randint(420, 980)).to_audio_segment(duration=dl)
         ).high_pass_filter(500).low_pass_filter(3200)
-        gain_step = -26 + min(12, step * 0.45) + rng.uniform(-3.0, 2.5)
-        brawa += szum.apply_gain(gain_step).fade_in(5).fade_out(10) + AudioSegment.silent(duration=rng.randint(25, 75))
+        gain_step = -26 + min(12, step * 0.5) + rng.uniform(-2.5, 2.0)
+        brawa += szum.apply_gain(gain_step).fade_in(5).fade_out(10) + AudioSegment.silent(duration=rng.randint(25, 60))
 
     smiech = AudioSegment.silent(duration=0)
-    for _ in range(4):
+    for _ in range(3):
         fala_seg = AudioSegment.silent(duration=0)
         base_freq = rng.randint(185, 255)
-        for _ in range(rng.randint(4, 6)):
-            sylaba = Sine(base_freq + rng.randint(-18, 18)).to_audio_segment(duration=110)
-            sylaba = sylaba.low_pass_filter(1400).apply_gain(-16 + rng.uniform(-2.0, 2.0)).fade_in(20).fade_out(35)
-            fala_seg += sylaba + AudioSegment.silent(duration=75)
-        smiech += fala_seg + AudioSegment.silent(duration=140)
+        for _ in range(rng.randint(3, 5)):
+            sylaba = Sine(base_freq + rng.randint(-15, 15)).to_audio_segment(duration=100)
+            sylaba = sylaba.low_pass_filter(1400).apply_gain(-16 + rng.uniform(-2.0, 2.0)).fade_in(15).fade_out(30)
+            fala_seg += sylaba + AudioSegment.silent(duration=65)
+        smiech += fala_seg + AudioSegment.silent(duration=120)
 
-    polaczone = brawa.overlay(smiech, position=250)
-    return effects.normalize(polaczone).fade_in(100).fade_out(250) - 4
+    polaczone = brawa.overlay(smiech, position=200)
+    return effects.normalize(polaczone).fade_in(80).fade_out(200) - 4
 
 
 def _klucz_kawalu(tekst: str) -> str:
@@ -1302,8 +1303,7 @@ def _zapisz_historie_kawaly(lista: list[str]) -> None:
         logging.error(f"Błąd zapisu historii kawałów: {e}")
 
 
-def pobierz_kawaly_z_sieci(urls: list[str] | None = None, max_z_zrodla: int = 25) -> list[str]:
-    """Pobiera i czyści kawały ze stron przez requests + BeautifulSoup."""
+def pobierz_kawaly_z_sieci(urls: list[str] | None = None, max_z_zrodla: int = 15) -> list[str]:
     zrodla = urls or ZRODLA_KAWALOW_URL
     headers = {
         "User-Agent": (
@@ -1316,7 +1316,7 @@ def pobierz_kawaly_z_sieci(urls: list[str] | None = None, max_z_zrodla: int = 25
 
     for url in zrodla:
         try:
-            resp = requests.get(url, headers=headers, timeout=12)
+            resp = requests.get(url, headers=headers, timeout=6)
             if resp.status_code != 200 or not resp.text:
                 continue
 
@@ -1327,7 +1327,7 @@ def pobierz_kawaly_z_sieci(urls: list[str] | None = None, max_z_zrodla: int = 25
             kandydaci: list[str] = []
             for el in soup.find_all(["p", "div", "article", "blockquote"]):
                 oczyszczony = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
-                if 55 <= len(oczyszczony) <= 1200:
+                if 55 <= len(oczyszczony) <= 800:
                     kandydaci.append(oczyszczony)
 
             random.shuffle(kandydaci)
@@ -1376,15 +1376,14 @@ def _filtruj_temat_kawaly(pula: list[str], rodzaj: str) -> list[str]:
         return list(pula)
 
     pasujace = [k for k in pula if any(s in k.lower() for s in slowa)]
-    if len(pasujace) < 4:
+    if len(pasujace) < 3:
         reszta = [k for k in pula if k not in pasujace]
         random.shuffle(reszta)
         pasujace.extend(reszta)
     return pasujace
 
 
-def wybierz_kawaly_bez_powtorek(rodzaj: str = "masztalski", ile_maks: int = 25) -> list[str]:
-    """Łączy pobrane kawały z sieci i zapasową pulę, pilnując braku powtórek w audycji i historii."""
+def wybierz_kawaly_bez_powtorek(rodzaj: str = "masztalski", ile_maks: int = 8) -> list[str]:
     with kawaly_lock:
         historia = _wczytaj_historie_kawaly()
         uzyte_w_historii = set(historia)
@@ -1417,7 +1416,7 @@ def wybierz_kawaly_bez_powtorek(rodzaj: str = "masztalski", ile_maks: int = 25) 
                 if len(wybrane) >= ile_maks:
                     break
 
-        if len(wybrane) < min(5, ile_maks):
+        if len(wybrane) < min(4, ile_maks):
             uzyte_w_historii.clear()
             for k in pula_tematyczna + pula_ogolna:
                 klucz = _klucz_kawalu(k)
@@ -1441,18 +1440,18 @@ def wybierz_kawaly_bez_powtorek(rodzaj: str = "masztalski", ile_maks: int = 25) 
         return wybrane
 
 
-def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> list[tuple[str, str]]:
+def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 120) -> list[tuple[str, str]]:
     if rodzaj == "jas":
-        powitanie = "Witajcie w Kąciku Jasia w Radiu Strefa Zero! Zaczynamy pięć minut z najlepszymi kawałami o Jasiu."
-        pozegnanie = "I to by było na tyle w Kąciku Jasia w Radiu Strefa Zero! Słuchajcie nas dalej i śmiejcie się do rozpuku."
+        powitanie = "Witajcie w Kąciku Jasia w Radiu Strefa Zero!"
+        pozegnanie = "To by było na tyle w Kąciku Jasia w Radiu Strefa Zero!"
     else:
-        powitanie = "Witajcie w Klubie Masztalskiego w Radiu Strefa Zero! Pięć minut mocnych kawałów w stylu masztalskiego i bacy."
-        pozegnanie = "Koniec audycji Klub Masztalskiego w Radiu Strefa Zero! Trzymajcie się ciepło i słuchajcie nas dalej."
+        powitanie = "Witajcie w Klubie Masztalskiego w Radiu Strefa Zero!"
+        pozegnanie = "Koniec audycji Klub Masztalskiego w Radiu Strefa Zero!"
 
-    pula = wybierz_kawaly_bez_powtorek(rodzaj=rodzaj, ile_maks=25)
+    pula = wybierz_kawaly_bez_powtorek(rodzaj=rodzaj, ile_maks=6)
     kwestie = [("glos", powitanie)]
     laczna_dlugosc = len(powitanie)
-    limit_znakow = max(2400, int(czas_trwania_sek * 13.5))
+    limit_znakow = max(650, int(czas_trwania_sek * 10.0))
 
     uzyte_klucze: set[str] = set()
     for kawal in pula:
@@ -1469,7 +1468,7 @@ def zbuduj_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 30
     return kwestie
 
 
-def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 300) -> str | None:
+def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_sek: int = 120) -> str | None:
     kwestie = zbuduj_audycje_kawaly(rodzaj=rodzaj, czas_trwania_sek=czas_trwania_sek)
     znacznik = datetime.now(STREFA_EUROPA).strftime("%Y%m%d_%H%M%S")
     prefix = "klub_masztalskiego" if rodzaj != "jas" else "kacik_jasia"
@@ -1478,7 +1477,7 @@ def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_s
 
     profil = PULA_BOTOW["marek_bas"] if rodzaj != "jas" else PULA_BOTOW["marek_standard"]
     reakcja_pub = _generuj_smiech_i_brawa()
-    cisza = AudioSegment.silent(duration=350)
+    cisza = AudioSegment.silent(duration=300)
     pliki_tymczasowe = []
 
     try:
@@ -1516,7 +1515,7 @@ def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_s
         try:
             zdalna_sciezka = f"{DIR_KAWALY}/{nazwa_pliku}"
             wyslij_i_zsynchronizuj(sftp, sciezka_koncowa, zdalna_sciezka)
-            logging.info(f"Wysłano audycję '{prefix}' (~5 min) do '{zdalna_sciezka}'.")
+            logging.info(f"Wysłano audycję '{prefix}' do '{zdalna_sciezka}'.")
             return zdalna_sciezka
         finally:
             sftp.close()
@@ -1539,10 +1538,9 @@ def wygeneruj_i_wyslij_audycje_kawaly(rodzaj: str = "masztalski", czas_trwania_s
 
 
 def _godziny_kawaly_co_40_min() -> set[str]:
-    """Wcześniejsze wejścia z rana + cykl co 40 min w przedziale 12:07 - 16:54."""
     terminy = {"06:05", "08:05"}
-    start_min = 12 * 60 + 7    # 727 (12:07)
-    koniec_min = 16 * 60 + 54 # 1014 (16:54)
+    start_min = 12 * 60 + 7
+    koniec_min = 16 * 60 + 54
     m = start_min
     while m <= koniec_min:
         terminy.add(f"{m // 60:02d}:{m % 60:02d}")
@@ -1841,7 +1839,7 @@ def webhook_sms():
     tresc_sms = (request.values.get("Body") or request.values.get("text") or request.values.get("message") or "").strip()
     numer_nadawcy = (request.values.get("From") or request.values.get("sender") or "").strip()
     if tresc_sms:
-        threading.Thread(target=przetworz_sms_w_tle, args=(tresc_sms, numer_nadawcy), daemon=True).start()
+        _odpal_w_tle(przetworz_sms_w_tle, tresc_sms, numer_nadawcy)
     return "<Response></Response>", 200
 
 
@@ -1873,24 +1871,20 @@ def test_generuj_godzine():
 
 @app.route("/test-news", methods=["GET"])
 def endpoint_test_news():
-    zdalna = wygeneruj_i_wyslij_news_5min(czas_trwania_sek=300)
-    if zdalna:
-        return jsonify({"status": "success", "remote_file": zdalna, "dlugosc_ok": "5 min"}), 200
-    return jsonify({"status": "error", "message": "Brak świeżych newsów RMF (lub poza oknem 7-23)."}), 400
+    _odpal_w_tle(wygeneruj_i_wyslij_news_5min, 150)
+    return jsonify({"status": "queued", "message": "Generowanie serwisu news ruszyło w tle. Sprawdź Logs lub SFTP za chwilę."}), 202
 
 
 @app.route("/test-reklamy-3min", methods=["GET"])
 def endpoint_test_reklamy_3min():
-    zdalna = wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek=180)
-    if zdalna:
-        return jsonify({"status": "success", "remote_file": zdalna, "dlugosc_ok": "3 min"}), 200
-    return jsonify({"status": "error", "message": "Nie udało się wygenerować bloku reklamowego 3 min."}), 500
+    _odpal_w_tle(wygeneruj_i_wyslij_blok_reklamowy_3min, 120)
+    return jsonify({"status": "queued", "message": "Generowanie bloku reklamowego ruszyło w tle. Sprawdź Logs lub SFTP za chwilę."}), 202
 
 
 @app.route("/pobierz-teraz", methods=["GET"])
 def endpoint_pobierz_teraz():
-    wynik = uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder=3)
-    return jsonify({"status": "success", "pobrane": wynik}), 200
+    _odpal_w_tle(uruchom_codzienne_pobieranie_wszystkich_folderow, 2)
+    return jsonify({"status": "queued", "message": "Pobieranie utworów ruszyło w tle. Sprawdź Logs po zakończeniu."}), 202
 
 
 @app.route("/raport-tygodniowy", methods=["GET"])
@@ -1904,10 +1898,8 @@ def endpoint_test_kawaly():
     rodzaj = (request.values.get("rodzaj") or "masztalski").strip().lower()
     if rodzaj not in ("masztalski", "jas"):
         rodzaj = "masztalski"
-    zdalna = wygeneruj_i_wyslij_audycje_kawaly(rodzaj=rodzaj, czas_trwania_sek=300)
-    if zdalna:
-        return jsonify({"status": "success", "rodzaj": rodzaj, "remote_file": zdalna}), 200
-    return jsonify({"status": "error", "message": "Nie udało się wygenerować audycji z kawałami."}), 500
+    _odpal_w_tle(wygeneruj_i_wyslij_audycje_kawaly, rodzaj, 120)
+    return jsonify({"status": "queued", "rodzaj": rodzaj, "message": "Generowanie audycji z kawałami ruszyło w tle."}), 202
 
 
 @app.route("/generuj-mix", methods=["GET", "POST"])
@@ -1919,7 +1911,7 @@ def endpoint_generuj_mix():
     if folder_docelowy not in WSZYSTKIE_FOLDERY_SFTP:
         folder_docelowy = DIR_MIXY
     try:
-        liczba = max(2, min(8, int(request.values.get("count", "3"))))
+        liczba = max(2, min(6, int(request.values.get("count", "3"))))
     except ValueError:
         liczba = 3
     try:
@@ -1940,17 +1932,16 @@ def endpoint_generuj_mix():
         None,
     )
 
-    zdalna = wygeneruj_mix_z_folderu(
-        folder_gatunkowy=folder_gatunek,
+    _odpal_w_tle(
+        wygeneruj_mix_z_folderu,
+        folder_gatunkowy=folder_gatunkowy,
         liczba_utworow=liczba,
         crossfade_ms=crossfade_ms,
         folder_docelowy=folder_docelowy,
         dzingiel_na_przejsciu=dzingiel_kandydat,
         sciszenie_db=duck_db,
     )
-    if zdalna:
-        return jsonify({"status": "success", "remote_file": zdalna, "folder": folder_gatunek}), 200
-    return jsonify({"status": "error", "message": f"Nie udało się wygenerować mixu z '{folder_gatunkowy}'."}), 400
+    return jsonify({"status": "queued", "folder": folder_gatunek, "message": "Generowanie mixu ruszyło w tle."}), 202
 
 
 @app.route("/usun-reklame", methods=["POST"])
@@ -2151,8 +2142,8 @@ SZABLON_JINGLES = """
                 {% endfor %}
             </select>
 
-            <label>Liczba utworów (2 - 8):</label>
-            <input type="number" id="mixCount" value="3" min="2" max="8">
+            <label>Liczba utworów (2 - 6):</label>
+            <input type="number" id="mixCount" value="3" min="2" max="6">
 
             <label>Crossfade (ms, np. 5000 = 5s):</label>
             <input type="number" id="mixCrossfade" value="5000" min="500" max="10000" step="250">
@@ -2275,9 +2266,9 @@ SZABLON_JINGLES = """
                 const params = new URLSearchParams({ folder, count, crossfade_ms, target_folder });
                 const res = await fetch('/generuj-mix?' + params.toString());
                 const data = await res.json();
-                if (data.status === 'success') {
+                if (data.status === 'success' || data.status === 'queued') {
                     mixStatus.style.color = '#2ed573';
-                    mixStatus.innerText = '✅ Gotowe! Wysłano na serwer: ' + data.remote_file;
+                    mixStatus.innerText = '✅ ' + (data.remote_file || data.message);
                 } else {
                     mixStatus.style.color = '#ff4757';
                     mixStatus.innerText = '❌ ' + data.message;
@@ -2466,17 +2457,17 @@ def endpoint_generuj_jingle_ai():
 def index_glowna():
     return """
     <h2>Radio Strefa Zero - Bot Aktywny 🚀</h2>
-    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, świeżych newsów 5 min, reklam 3 min, kawałów 5 min, mixów i dziennego pobierania działa.</p>
+    <p>Pełny system automatyzacji radia, zegara 24/7 z 5 sygnałami, świeżych newsów, reklam, kawałów, mixów i pobierania działa.</p>
     <ul>
         <li><a href="/jingles"><b>🎛️ Otwórz Generator Dżingli AI, Blok Reklamowy, Mikser, Raport i Logi</b></a></li>
         <li><a href="/generuj-godzine">Test generowania zapowiedzi godziny (5 pików)</a></li>
-        <li><a href="/test-news">Test świeżego serwisu news (~5 min)</a></li>
-        <li><a href="/test-reklamy-3min">Test bloku reklamowego (~3 min)</a></li>
-        <li><a href="/pobierz-teraz">Wymuś teraz pobranie po 3 utwory do 5 folderów</a></li>
+        <li><a href="/test-news">Test serwisu news (w tle)</a></li>
+        <li><a href="/test-reklamy-3min">Test bloku reklamowego (w tle)</a></li>
+        <li><a href="/pobierz-teraz">Wymuś teraz pobranie utworów (w tle)</a></li>
         <li><a href="/raport-tygodniowy">Podgląd raportu tygodniowego pobranych utworów</a></li>
-        <li><a href="/test-kawaly?rodzaj=masztalski">Test audycji: Klub Masztalskiego (~5 min + śmiech/brawa)</a></li>
-        <li><a href="/test-kawaly?rodzaj=jas">Test audycji: Kącik Jasia (~5 min + śmiech/brawa)</a></li>
-        <li><a href="/generuj-mix?folder=muzyka%20klubowa&count=3">Test generowania mixu (muzyka klubowa)</a></li>
+        <li><a href="/test-kawaly?rodzaj=masztalski">Test audycji: Klub Masztalskiego (w tle + śmiech/brawa)</a></li>
+        <li><a href="/test-kawaly?rodzaj=jas">Test audycji: Kącik Jasia (w tle + śmiech/brawa)</a></li>
+        <li><a href="/generuj-mix?folder=muzyka%20klubowa&count=3">Test generowania mixu (w tle)</a></li>
     </ul>
     """
 
@@ -2601,27 +2592,23 @@ def petla_harmonogramu_w_tle():
                             pass
                 ostatnie_czyszczenie_ts = obecny_ts
 
-            # Raz dziennie o 06:00 pobierz po 3 nowe, niepowtarzające się utwory do 5 folderów
             if teraz.hour == 6 and teraz.minute == 0 and ostatni_dzien_pobierania != dzis_str:
-                uruchom_codzienne_pobieranie_wszystkich_folderow(liczba_na_folder=3)
+                _odpal_w_tle(uruchom_codzienne_pobieranie_wszystkich_folderow, 2)
                 ostatni_dzien_pobierania = dzis_str
 
-            # Co tydzień w niedzielę (weekday == 6) o 10:00 wygeneruj raport pobranych utworów
             klucz_niedzieli = teraz.strftime("%Y-W%U")
             if teraz.weekday() == 6 and teraz.hour == 10 and teraz.minute == 0 and ostatni_raport_tydzien != klucz_niedzieli:
                 generuj_i_zapisz_raport_tygodniowy()
                 wyczysc_raport_tygodniowy_po_wyslaniu()
                 ostatni_raport_tydzien = klucz_niedzieli
 
-            # Audycje kawałów (Klub Masztalskiego / Kącik Jasia — po ~5 min każda + śmiech/brawa)
             if hhmm in GODZINY_KAWALY_CO_40_MIN and _raz_na_minute(f"kawaly_{klucz_min}"):
                 rodzaj_audycji = "masztalski" if (licznik_audycji_kawaly % 2 == 0) else "jas"
                 licznik_audycji_kawaly += 1
-                wygeneruj_i_wyslij_audycje_kawaly(rodzaj=rodzaj_audycji, czas_trwania_sek=300)
+                _odpal_w_tle(wygeneruj_i_wyslij_audycje_kawaly, rodzaj_audycji, 120)
 
-            # Blok reklamowy po ~3 minuty co pełne 2 godziny (np. o :15)
             if teraz.minute == 15 and teraz.hour % 2 == 0 and _raz_na_minute(f"reklamy3m_{klucz_min}"):
-                wygeneruj_i_wyslij_blok_reklamowy_3min(czas_trwania_sek=180)
+                _odpal_w_tle(wygeneruj_i_wyslij_blok_reklamowy_3min, 120)
 
             if teraz.minute == 40:
                 docelowa_godzina = (teraz.hour + 1) % 24
@@ -2645,9 +2632,7 @@ def petla_harmonogramu_w_tle():
                             logging.info(f"Wysłano plik godziny (24/7 + 5 pików) do '{DIR_GODZINA}': {nazwa_pliku_godzina}")
 
                         if INFO_RMF_START <= docelowa_godzina < INFO_RMF_KONIEC:
-                            zdalny_news = wygeneruj_i_wyslij_news_5min(czas_trwania_sek=300)
-                            if zdalny_news:
-                                wyslano_cokolwiek = True
+                            _odpal_w_tle(wygeneruj_i_wyslij_news_5min, 150)
 
                         if docelowa_godzina == 7:
                             kwestie_poranek = zbuduj_poranny_serwis()
@@ -2701,7 +2686,7 @@ def petla_harmonogramu_w_tle():
 
             if teraz.minute == 0 and teraz.hour % 4 == 0 and teraz.hour != ostatni_mix_godzina:
                 folder_na_mix = "muzyka klubowa" if (teraz.hour >= 20 or teraz.hour < 6) else "disco polo dance"
-                wygeneruj_mix_z_folderu(folder_gatunkowy=folder_na_mix, liczba_utworow=3, crossfade_ms=5000)
+                _odpal_w_tle(wygeneruj_mix_z_folderu, folder_gatunkowy=folder_na_mix, liczba_utworow=3, crossfade_ms=5000)
                 ostatni_mix_godzina = teraz.hour
 
         except Exception as e:
